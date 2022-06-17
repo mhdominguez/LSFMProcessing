@@ -1,9 +1,9 @@
-# BDV H5toKLB, 8bit
+# BDV H5toKLB, 16bit
 # 2019-2021 Martin H. Dominguez
 # Gladstone Institutes
 
-# this script converts an entire 8-bit H5 dataset to KLB, excluding dataset.xml (needs to be done manually with BigDataViewer KLB import)
-# usage: python3 dataset_folder_export_all_h5_to_klb_pyklb-8bit.py
+# this script converts an entire 16-bit H5 dataset to KLB, excluding dataset.xml (needs to be done manually with BigDataViewer KLB import)
+# usage: python3 dataset_folder_export_all_h5_to_klb_pyklb-16bit.py
 
 import sys
 import os
