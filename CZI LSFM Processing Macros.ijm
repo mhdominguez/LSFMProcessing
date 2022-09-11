@@ -3746,5 +3746,65 @@ macro "Enhance local contrast (stack, selected image ONLY)..." {
 	    }
 	  }
 	}
+	print("DONE: Enhance local contrast (stack, selected image ONLY).");
+}
+
+macro "Montage/Tiles to stack (selected image ONLY)..." {
+	getDimensions(dim_width, dim_height, dim_channels, dim_slices, dim_frames);
+	master_title = getTitle();
+	rand_num = d2s( floor(random() * 1000000 ), 0 );
+		
+	n_wide = 2;
+	n_tall = 2;
+	border_internal = 12;
+	border_external = 0;
+	//fast = true;
+	//process_as_composite = true;
 	
+	Dialog.create("Montage/Tiles to stack...");
+	Dialog.addNumber("Horizontal panels:", n_wide);
+	Dialog.addNumber("Vertical panels:", n_tall);
+	Dialog.addNumber("Internal dividers width (px):", border_internal);
+	Dialog.addNumber("External border width (px)", border_external );
+	Dialog.show();
+	
+	n_wide = Dialog.getNumber();
+	n_tall = Dialog.getNumber();
+	border_internal = Dialog.getNumber();
+	border_external = Dialog.getNumber();
+	
+	tile_width = ( dim_width - ( 2 * border_external ) - ( (n_wide-1) * border_internal ) ) / n_wide;
+	tile_height = ( dim_height - ( 2 * border_external ) - ( (n_tall-1) * border_internal ) ) / n_tall;
+	
+	if ( tile_height != floor(tile_height) || tile_width != floor(tile_width) ) {
+		print("Indivisible image dimensions for tile specifications!  Adjust number of tiles or border width(s), and try again.");
+	} else if ( n_wide * n_tall < 2 || n_wide < 1 || n_tall < 1 ) {
+		print("Not enough tiles specified!  Adjust number of tiles or border width(s), and try again.");
+	} else {
+		//proceed by counting down horizontal axis first, then vertical
+		pos_x = border_external;
+		pos_y = border_external;
+		img_num = 0;
+		for ( iii = 0; iii < n_tall; iii++ ) {
+			for ( ii = 0; ii < n_wide; ii++ ) {
+				selectWindow(master_title);
+				run("Select None");
+				pos_x = border_external + ( ii * ( tile_width + border_internal ) );
+				pos_y = border_external + ( iii * ( tile_width + border_internal ) );
+				//run("Specify...", "width="+d2s(tile_width,0)+" height="+d2s(tile_height,0)+" x="+d2s(pos_x,0)+" y="+d2s(pos_y,0)+" slice=1");
+				makeRectangle(pos_x, pos_y, tile_width, tile_height);
+				run("Duplicate...", " ");
+				rename( "Image" + rand_num + "_" + d2s(img_num,0) );
+				if ( img_num > 0 ) {
+					run("Concatenate...", "  image1=Image" + rand_num + "_" + d2s(img_num-1,0) +" image2=Image" + rand_num + "_" + d2s(img_num,0) + " image3=[-- None --]" );
+					rename( "Image" + rand_num + "_" + d2s(img_num,0) ); //rename the concatenated stack
+				}
+				img_num++;
+			}
+		}
+		selectWindow("Image" + rand_num + "_" + d2s(img_num-1,0));
+		rename( master_title + "_as_stack" );
+		//selectWindow(master_title);
+		//close();
+	}
 }
