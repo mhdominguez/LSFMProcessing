@@ -3790,7 +3790,7 @@ macro "Montage/Tiles to stack (selected image ONLY)..." {
 				selectWindow(master_title);
 				run("Select None");
 				pos_x = border_external + ( ii * ( tile_width + border_internal ) );
-				pos_y = border_external + ( iii * ( tile_width + border_internal ) );
+				pos_y = border_external + ( iii * ( tile_height + border_internal ) );
 				//run("Specify...", "width="+d2s(tile_width,0)+" height="+d2s(tile_height,0)+" x="+d2s(pos_x,0)+" y="+d2s(pos_y,0)+" slice=1");
 				makeRectangle(pos_x, pos_y, tile_width, tile_height);
 				run("Duplicate...", " ");
