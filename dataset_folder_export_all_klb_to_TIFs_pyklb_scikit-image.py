@@ -12,8 +12,10 @@ for root, dirs, files in os.walk("."):
 			filename_root, file_extension = os.path.splitext(filename)
 			
 			file_to_modify = filename
-			print( "Exporting TIFs from file", file_to_modify)
+			print( "Exporting TIF from file", file_to_modify)
 			
-
+			
 			image = pyklb.readfull(filename)	
-			tp.imsave(filename_root + ".tif", image, compress=6)
+			shape = image.shape
+			print(  shape)
+			tp.imsave(filename_root + ".tif", image.reshape(shape[0],1,shape[1],shape[2]), compress=6, resolution=(1./0.380490284561, 1./0.380490284561), imagej=True, metadata={'spacing': 1.52196113824,'unit': 'microns'} )
