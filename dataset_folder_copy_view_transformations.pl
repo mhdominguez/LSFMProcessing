@@ -8,18 +8,23 @@
 # usage: perl dataset_folder_copy_view_transformations.pl
 
 use Cwd qw( cwd );
+use File::Spec;
+
+
 my $path = Cwd::cwd();
-
-
 
 #==================
 #Main subroutine
 #==================
 sub main {
-	my (  @arguments ) = @_;
+	my $filename = shift;
 	my $html = "";
+	unless ( defined($filename) && -e File::Spec->catpath( $path, $filename ) ) {
+		$filename = "dataset.xml";
+	}
 	
-	if ( open(FILE, "<$path/dataset\.xml" ) ) {
+	if ( open(FILE, "<" . File::Spec->catpath( $path, $filename ) ) ) {
+	
 		flock(FILE, LOCK_EX);
 		$_ = $/;
 		$/ = undef;
@@ -28,7 +33,7 @@ sub main {
 		close(FILE);
 		$/ = $_;
 	} else {
-		print "Error opening $path/dataset\.xml!\n";
+		print "Error opening " . File::Spec->catpath( $path, $filename ) . "!\n";
 		return;
 	}
 	my $view_setups_xml = "";
@@ -215,14 +220,14 @@ sub main {
 
 	}
 
-	rename( "$path/dataset\.xml", "$path/dataset\.xml\." . time() );
-	if ( open(FILE, ">$path/dataset\.xml" ) ) {
+	rename( File::Spec->catpath( $path, $filename ), File::Spec->catpath( $path, $filename . "." . time() ) );
+	if ( open(FILE, ">" . File::Spec->catpath( $path, $filename ) ) ) {
 		flock(FILE, LOCK_EX);
 		print FILE $html;
 		flock(FILE, LOCK_UN);
 		close(FILE);
 	} else {
-		print "Error writing to $path/dataset\.xml!\n";
+		print "Error writing to " . File::Spec->catpath( $path, $filename ) . "!\n";
 		return;
 	}
 }
