@@ -90,7 +90,7 @@ sub main {
 	print "\n";
 	
 	#go ahead and parse XML text lines to derive the actual view setups we will ultimately copy and replace
-	my @master_list; #array of arrays, 0=timepoint, 1=viewsetup, 2=line start, 3=line end
+	my @original_list; #array of arrays, 0=timepoint, 1=viewsetup, 2=line start, 3=line end
 	#my $this_text;
 	my @split_this_text;
 	my $this_timepoint, $this_viewsetup;
@@ -121,10 +121,10 @@ sub main {
 			
 			next if ( $this_viewsetup eq "" || $this_timepoint eq "" );
 			#print "Pushing $this_timepoint,$this_viewsetup,$this_start,$this_stop\n";
-			push( @master_list, [$this_timepoint,$this_viewsetup,$this_start,$this_stop] ) if ( defined($this_timepoint) && $this_timepoint >= 0 && defined($this_viewsetup) && $this_viewsetup >= 0 );
+			push( @original_list, [$this_timepoint,$this_viewsetup,$this_start,$this_stop] ) if ( defined($this_timepoint) && $this_timepoint >= 0 && defined($this_viewsetup) && $this_viewsetup >= 0 );
 	}
 	#exit 0;
-	my @timepoint_list = map{ $_->[0] } @master_list;
+	my @timepoint_list = map{ $_->[0] } @original_list;
 	@timepoint_list = uniq(@timepoint_list);
 	@timepoint_list = sort{ $a <=> $b } @timepoint_list;
 	
@@ -135,7 +135,7 @@ sub main {
 	for ( my $i=0; $i<scalar(@timepoint_list); $i++ ) {
 		#print "Timepoint $timepoint_list[$i]...\n";
 		if ( $copy_mode == 0 ) { #preferred option
-			my @slave_list_lines = ();
+			my @destination_list_lines = ();
 			my $max_registration_data_line_number;
 			my $max_registration_data_characters;
 			my $going;
@@ -145,52 +145,52 @@ sub main {
 			my $removed_characters;
 			#my $newstr_characters;
 			for ( my $j=0; $j<scalar(@matched_view_setups); $j++ ) {
-				@slave_list_lines = ();
+				@destination_list_lines = ();
 				$max_registration_data_characters = 0;
 				$max_registration_data_line_number = -1;
 				my $start_adjust_positions;
-				for ( my $k=0; $k<scalar(@master_list); $k++ ) {
-					if ( $master_list[$k][0] eq $timepoint_list[$i] ) {
+				for ( my $k=0; $k<scalar(@original_list); $k++ ) {
+					if ( $original_list[$k][0] eq $timepoint_list[$i] ) {
 						#right timepoint, so now look in the view setups available for this timpoint
 						$going = 0;
-						map{ $going = 1 if ( $_ eq $master_list[$k][1] ) } @{$matched_view_setups[$j]};
+						map{ $going = 1 if ( $_ eq $original_list[$k][1] ) } @{$matched_view_setups[$j]};
 						
 						next unless ( $going > 0 ); #only consider lines belonging to this matched view setups group
-						#print "Checking timepoint $master_list[$k][0]\n";
+						#print "Checking timepoint $original_list[$k][0]\n";
 						
-						if ( $master_list[$k][3] - $master_list[$k][2] > $max_registration_data_characters ) { #new master viewsetup for this timepoint
-							$max_registration_data_characters = $master_list[$k][3] - $master_list[$k][2];
+						if ( $original_list[$k][3] - $original_list[$k][2] > $max_registration_data_characters ) { #new original viewsetup for this timepoint
+							$max_registration_data_characters = $original_list[$k][3] - $original_list[$k][2];
 							$max_registration_data_line_number = $k;
-							push( @slave_list_lines, $k ) if ($max_registration_data_line_number>=0); #previous master relegated now to slave position
+							push( @destination_list_lines, $k ) if ($max_registration_data_line_number>=0); #previous original relegated now to destination position
 						} else {
-							push( @slave_list_lines, $k );
+							push( @destination_list_lines, $k );
 						}
 					}
 				}
-				#print "Looking at timepoint $timepoint_list[$i], master view setup $matched_view_setups[$j][0] / $max_registration_data_line_number, with slave lines: " . join(',',@slave_list_lines) . "\n";
+				#print "Looking at timepoint $timepoint_list[$i], original view setup $matched_view_setups[$j][0] / $max_registration_data_line_number, with destination lines: " . join(',',@destination_list_lines) . "\n";
 				if ( $max_registration_data_line_number >= 0 && $max_registration_data_characters > 20 ) { #we're ready to copy string data
 					#print "Made it here\n";
-					$newstr = substr($html,$master_list[$max_registration_data_line_number][2],$master_list[$max_registration_data_line_number][3]-$master_list[$max_registration_data_line_number][2]);
+					$newstr = substr($html,$original_list[$max_registration_data_line_number][2],$original_list[$max_registration_data_line_number][3]-$original_list[$max_registration_data_line_number][2]);
 					#print "Replacement text: $newstr\n\n";
 
-					for ( my $k=0; $k<scalar(@slave_list_lines); $k++ ) {
+					for ( my $k=0; $k<scalar(@destination_list_lines); $k++ ) {
 						#first, change setup number to reflect current setup
 						$add_this = $newstr;
-						#$add_this =~ s/setup=\"(\d+)\"/setup=\"$slave_list_lines[$k]\"/i;
+						#$add_this =~ s/setup=\"(\d+)\"/setup=\"$destination_list_lines[$k]\"/i;
 						$added_characters = length($add_this);
 						
 						#second, figure out where to start adjusting character offsets in $html
-						$start_adjust_positions = $master_list[$slave_list_lines[$k]][3];
+						$start_adjust_positions = $original_list[$destination_list_lines[$k]][3];
 						
 						#third, go ahead and do the replacement
-						$removed_characters = $master_list[$slave_list_lines[$k]][3] - $master_list[$slave_list_lines[$k]][2];
+						$removed_characters = $original_list[$destination_list_lines[$k]][3] - $original_list[$destination_list_lines[$k]][2];
 						
 
 						#print "Substitute after this point: " . substr($html,$start_adjust_positions,108) . "\n\n\n";
 						$added_characters -= $removed_characters;
-						map{ if( $_->[3] > $start_adjust_positions ) {  $_->[3] += $added_characters; }  if( $_->[2] > $start_adjust_positions ) { $_->[2] += $added_characters; } } @master_list;
+						map{ if( $_->[3] > $start_adjust_positions ) {  $_->[3] += $added_characters; }  if( $_->[2] > $start_adjust_positions ) { $_->[2] += $added_characters; } } @original_list;
 						
-						substr($html,$master_list[$slave_list_lines[$k]][2],$removed_characters,$add_this);
+						substr($html,$original_list[$destination_list_lines[$k]][2],$removed_characters,$add_this);
 
 					}
 					
@@ -202,7 +202,7 @@ sub main {
 		
 			#get viewsetups
 			@viewsetup_list = ();
-			map{ push( @viewsetup_list, $_->[1] ) if ( $_->[0] eq $timepoint_list[$i] ); } @master_list;
+			map{ push( @viewsetup_list, $_->[1] ) if ( $_->[0] eq $timepoint_list[$i] ); } @original_list;
 			@viewsetup_list = uniq(@viewsetup_list);
 			@viewsetup_list = sort{ $a cmp $b } @viewsetup_list;
 			
