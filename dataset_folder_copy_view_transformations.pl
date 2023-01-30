@@ -19,11 +19,11 @@ my $path = Cwd::cwd();
 sub main {
 	my $filename = shift;
 	my $html = "";
-	unless ( defined($filename) && -e File::Spec->catpath( $path, $filename ) ) {
+	unless ( defined($filename) && -e File::Spec->catfile( $path, $filename ) ) {
 		$filename = "dataset.xml";
 	}
 	
-	if ( open(FILE, "<" . File::Spec->catpath( $path, $filename ) ) ) {
+	if ( open(FILE, "<" . File::Spec->catfile( $path, $filename ) ) ) {
 	
 		flock(FILE, LOCK_EX);
 		$_ = $/;
@@ -33,7 +33,7 @@ sub main {
 		close(FILE);
 		$/ = $_;
 	} else {
-		print "Error opening " . File::Spec->catpath( $path, $filename ) . "!\n";
+		print "Error opening " . File::Spec->catfile( $path, $filename ) . "!\n";
 		return;
 	}
 	my $view_setups_xml = "";
@@ -220,14 +220,14 @@ sub main {
 
 	}
 
-	rename( File::Spec->catpath( $path, $filename ), File::Spec->catpath( $path, $filename . "." . time() ) );
-	if ( open(FILE, ">" . File::Spec->catpath( $path, $filename ) ) ) {
+	rename( File::Spec->catfile( $path, $filename ), File::Spec->catfile( $path, $filename . "." . time() ) );
+	if ( open(FILE, ">" . File::Spec->catfile( $path, $filename ) ) ) {
 		flock(FILE, LOCK_EX);
 		print FILE $html;
 		flock(FILE, LOCK_UN);
 		close(FILE);
 	} else {
-		print "Error writing to " . File::Spec->catpath( $path, $filename ) . "!\n";
+		print "Error writing to " . File::Spec->catfile( $path, $filename ) . "!\n";
 		return;
 	}
 }
