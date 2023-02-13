@@ -1440,7 +1440,7 @@ function main_series_tif_to_anaglyphs(directory,outputDirectory) {
 			
 			file = directory + file_sep + name_ext[1];
 			processList = Array.concat( processList, file );
-			outfileList = Array.concat( outfileList, directory + file_sep + "Anaglyphs/" + name_ext[1] );
+			outfileList = Array.concat( outfileList, directory + file_sep + "Anaglyphs" + file_sep + name_ext[1] );
 			
 			Ext.setId(file);
 			Ext.getSizeZ(sizeZ);
@@ -1642,7 +1642,7 @@ function main_time_series_tif_to_mip(directory,outputDirectory) {
 			
 			file = directory + file_sep + name_ext[1];
 			processList = Array.concat( processList, file );
-			outfileList = Array.concat( outfileList, directory + file_sep + "MIPs/" + name_ext[1] );
+			outfileList = Array.concat( outfileList, directory + file_sep + "MIPs" + file_sep + name_ext[1] );
 			
 			Ext.setId(file);
 			Ext.getSizeZ(sizeZ);
@@ -2347,7 +2347,7 @@ function main_tifseries_16bit_to_8bit(folder_in_batch,directory,outputDirectory)
 			processList_max = Array.concat( processList_max, max );
 			//print( "item " + i + ", mean: " + mean + ", stdev: " + std );
 			
-			saveAs("Tiff", directory + "Tmp/" + name_ext[2] + ".tif" );
+			saveAs("Tiff", directory + "Tmp" + file_sep + name_ext[2] + ".tif" );
 			close();
 			call("java.lang.System.gc");			
 			
@@ -2372,7 +2372,7 @@ function main_tifseries_16bit_to_8bit(folder_in_batch,directory,outputDirectory)
 		print( "Processing view setup: " + view_setups[m] + " sizeZ = " + d2s(max_sizeZ,0) + "..." );
 
 		for (i=0; i<processList.length; i++) {
-			open(directory + "Tmp/" + processList[i] + ".tif" );
+			open(directory + "Tmp" + file_sep + processList[i] + ".tif" );
 			getVoxelSize(vox_width, vox_height, vox_depth, vox_unit);
 			//run("Duplicate...", "duplicate");
 			orig_stack = getTitle();
@@ -2962,7 +2962,7 @@ function main_stacks_to_partial_collapse (directory,collapse_Z_size_micron,overl
 			
 			file = directory + file_sep + name_ext[1];
 			processList = Array.concat( processList, file );
-			outfileList = Array.concat( outfileList, directory + file_sep + "Partial_Z_Collapsed/" + name_ext[1] );
+			outfileList = Array.concat( outfileList, directory + file_sep + "Partial_Z_Collapsed" + file_sep + name_ext[1] );
 			
 			Ext.setId(file);
 			Ext.getSizeZ(sizeZ);
