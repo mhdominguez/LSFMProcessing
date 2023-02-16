@@ -269,13 +269,17 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 		
 		//get refractive index
 		//although this will retrieve metadata only from active series, refractive index is not different for each channel or view but instead is the same for everything
-		RIlightsheet = 0;
 		Ext.getMetadataValue("Information|Image|RefractiveIndex #1", RIlightsheet);
-		//print ( "Metadata: \n" + metadata_value  + "\n" ); exit();
-		
+		if ( RIlightsheet == 0 ) {
+			Ext.getMetadataValue("Information|Image|RefractiveIndex", RIlightsheet);
+		}
+		//print ( "Metadata: \n" + metadata_value  + "\n" ); exit();	
+			
 		//get objective name
-		Olightsheet = "";
 		Ext.getMetadataValue("Experiment|AcquisitionBlock|AcquisitionModeSetup|Objective #1", Olightsheet);
+		if ( Olightsheet == "" || Olightsheet == 0 ) {
+			Ext.getMetadataValue("Experiment|AcquisitionBlock|AcquisitionModeSetup|Objective", Olightsheet);
+		}
 	
 		
 		//get view angles, again metadata permeates all series and these values can be extracted with any series open
@@ -879,13 +883,17 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 		
 		//get refractive index
 		//although this will retrieve metadata only from active series, refractive index is not different for each channel or view but instead is the same for everything
-		RIlightsheet = 0;
 		Ext.getMetadataValue("Information|Image|RefractiveIndex #1", RIlightsheet);
-		//print ( "Metadata: \n" + metadata_value  + "\n" ); exit();
-		
+		if ( RIlightsheet == 0 ) {
+			Ext.getMetadataValue("Information|Image|RefractiveIndex", RIlightsheet);
+		}
+		//print ( "Metadata: \n" + metadata_value  + "\n" ); exit();	
+			
 		//get objective name
-		Olightsheet = "";
 		Ext.getMetadataValue("Experiment|AcquisitionBlock|AcquisitionModeSetup|Objective #1", Olightsheet);
+		if ( Olightsheet == "" || Olightsheet == 0 ) {
+			Ext.getMetadataValue("Experiment|AcquisitionBlock|AcquisitionModeSetup|Objective", Olightsheet);
+		}
 	
 		
 		//get view angles, again metadata permeates all series and these values can be extracted with any series open
