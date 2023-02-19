@@ -4,9 +4,32 @@
 
 // requires: 
 //     Fiji, using ImageJ 1.53f or greater
-//     PSF generator (http://bigwww.epfl.ch/algorithms/psfgenerator/)
-//     Parallel Spectral Deconvolution (https://sites.google.com/site/piotrwendykier/software/deconvolution/parallelspectraldeconvolution)
-//     Please delete file jars/jtransforms-2.4.jar before using deconvolution
+//     BigStitcher, Bio-Formats, SiMView packages installed (checked) in Fiji Update
+//     PSF generator 18.12.2017 (http://bigwww.epfl.ch/algorithms/psfgenerator/)
+//       - download Fiji plugin and place PSF_Generator.jar in plugins folder
+//     Parallel Spectral Deconvolution 1.12 (https://sites.google.com/site/piotrwendykier/software/deconvolution/parallelspectraldeconvolution)
+//       - download plugin binary zip file and copy all *.jar files to plugins folder
+//       - delete file jars/jtransforms-2.4.jar before using deconvolution
+//     pyklb and h5py installed separately for h5/klb functions
+//       - on Ubuntu, can use "sudo pip3 install pyklb h5py" at console to install
+
+function show_instructions () {
+	Dialog.create("LSFM processing install info/instructions...");
+	//Dialog.setInsets(0,0,0);
+	Dialog.addMessage("LSFMProcessing requires:",16,"Black");
+    Dialog.addMessage("   Fiji, using ImageJ 1.53f or greater",14,"Black");
+    Dialog.addMessage("   BigStitcher, Bio-Formats, SiMView packages installed (checked) in Fiji Update",14,"Black");
+    Dialog.addMessage("   PSF generator 18.12.2017",14,"Black");
+    Dialog.addMessage("       - download Fiji plugin (http://bigwww.epfl.ch/algorithms/psfgenerator/)",12,"Black");
+	Dialog.addMessage("       - place PSF_Generator.jar in Fiji plugins folder",12,"Black");
+    Dialog.addMessage("   Parallel Spectral Deconvolution 1.12",14,"Black");
+    Dialog.addMessage("       - download plugin binary zip file (https://sites.google.com/site/piotrwendykier/software/deconvolution/parallelspectraldeconvolution)",12,"Black");
+    Dialog.addMessage("       - unzip and copy all *.jar files to Fiji plugins folder",12,"Black");
+    Dialog.addMessage("       - delete file jtransforms-2.4.jar in Fiji jars folder before using deconvolution",12,"Black");
+    Dialog.addMessage("   pyklb and h5py installed on system, for h5/klb functions",14,"Black");
+    Dialog.addMessage("       - on Ubuntu, can use \"sudo pip3 install pyklb h5py\" at console to install",12,"Black");
+	Dialog.show();
+}
 
 var file_sep = File.separator();
 var max_slice_depth = 480; //heap allocation in MB should be at least 200 times max slice depth
@@ -19,9 +42,12 @@ var generate_mips_when_filtering = true;
 var deconvolution_regression_parameter = 50;
 var deconvolution_subtract_camera_noise = true;
 var detection_NA_penalty = 10;
+var path_dataset_folder_export_all_h5_to_klb_pyklb = "dataset_folder_export_all_h5_to_klb_pyklb.py";
+
+var default_tissue_refractive_index = 1.4;
 
 
-function LS_PSF_generator ( NA_objective, NA_lightsheet, RI_immersion, RI_sample, lambda_lightsheet, lambda_detection, res_XY, res_Z, Z_radius_lightsheet, Olightsheet ) {
+function LS_PSF_generator ( NA_objective, NA_lightsheet, RI_immersion, RI_sample, lambda_lightsheet, lambda_detection, res_XY, res_Z, Z_radius_lightsheet, WD_return, CS_return ) {
 	output_file = "#PSFGenerator\nPSF-shortname=GL\n"; // start us off
 	output_file = output_file + "ResLateral=" + d2s(res_XY,2) + "\nResAxial=" + d2s(res_Z,2) + "\n"; //voxel units
     
@@ -29,7 +55,6 @@ function LS_PSF_generator ( NA_objective, NA_lightsheet, RI_immersion, RI_sample
 	if ( detection_NA_penalty > 0 &&  detection_NA_penalty < 75 ) {
 		NA_objective -= ( NA_objective * detection_NA_penalty / 100 );
 	}
-	
 	
     //if no lambda_detection, use lambda_lightsheet
     if ( lambda_detection == NaN || lambda_detection <= 0 ) {
@@ -43,31 +68,44 @@ function LS_PSF_generator ( NA_objective, NA_lightsheet, RI_immersion, RI_sample
 	
 	//now, calculate smallest PSF size
 	//first, estimate PSF Z dimension as at least 4 waists; the beam waist is related to lightsheet NA and wavelength: w0 = 2n*(lambda_lightsheet)/pi*NA
-	beam_waist = (RI_immersion/2) * lambda_lightsheet / ( NA_lightsheet * PI );
-	//print( "beam waist: " + d2s(beam_waist,6) + " due to " + d2s(RI_immersion,3) + " " + d2s(NA_lightsheet,3) + " " + d2s(lambda_lightsheet,2) + " " + d2s(PI,4) + "\n" );
 	
-	//for gaussian light sheet, assume the beam waist is its maximal possible (i.e. the beam waist w(z) at the edge of the image, at a radius of half of the X dimension of the main image
-	//start with w(z), the beam waist at distance Z_radius_lightsheet from the center of the focus, where lightsheet is narrowest at width beam_waist
+	//start with w(0), beam waist at center
+	beam_waist = RI_immersion * lambda_lightsheet / ( NA_lightsheet * PI );
+	//print( "  ..beam waist at center (nm): " + d2s(beam_waist,2) + " due to " + d2s(RI_immersion,3) + " " + d2s(NA_lightsheet,3) + " " + d2s(lambda_lightsheet,2) + " " + d2s(PI,4) + " " + d2s(Z_radius_lightsheet,4) + " " + d2s(res_XY,4) + "\n" );
+
+	//Gaussian light sheet calculations:
+	//https://en.wikipedia.org/wiki/Rayleigh_length
+	//https://www.photometrics.com/wp-content/uploads/2019/10/Light-Sheet-Microscopy-App-Note.pdf
+	//https://core.ac.uk/download/pdf/157810694.pdf
+	//https://opg.optica.org/aop/fulltext.cfm?uri=aop-10-1-111&id=381035
+	
+	//Rayleigh distance is not really used post-hoc, but may be helpful for manually setting up light sheet during imaging
+	//Zr = ( PI * beam_waist ) / lambda_lightsheet;
+	//print( "  ..Rayleigh radius (nm): " + d2s(Zr,2) );
+
+	// determine light sheet thickness as an X-invariant single value, so choose thickness w(z) at some reasonable X value based on Z_radius_lightsheet and res_XY
+	//now calculate with w(z), the beam waist at distance Z_radius_lightsheet (in pixels) from the center of the focus, where lightsheet is narrowest at width beam_waist
 	beam_waist *= beam_waist; // square beam waist for this
 	beam_width_z_squared = lambda_lightsheet * Z_radius_lightsheet * res_XY / ( PI * beam_waist );
 	beam_width_z_squared *= beam_width_z_squared;
 	beam_width_z_squared = beam_waist * ( 1 + beam_width_z_squared ); // this is actually w(z) squared, but we will use this instead of w(z)	
 	//print( "w(z): " + d2s(sqrt(beam_width_z_squared),4) + " due to " + d2s(res_XY,2) + " and "  + d2s(Z_radius_lightsheet,1) + " and " + d2s(res_Z,4) + "\n" );
-	//beam_width_z_squared = 2 * beam_waist;
-	beam_waist *= 2; //use Rayleigh distance as default lightsheet thickness (remember this si actually beam_waist_squared
 	
 	if ( beam_waist > beam_width_z_squared ) { //take as lightsheet thickness the greater of width at Rayleigh distance, or calculated distance based on image width input into this function (Z_radius_lightsheet)
+		//print ( "using beam_waists squared = " + d2s(beam_waist,8) + ", beam_width_z_squared = " + d2s(beam_width_z_squared,8)  );
 		beam_width_z_squared = beam_waist;
+	} else {
+		//print ( "using beam_width_z_squared squared = " + d2s(beam_width_z_squared,8) + ", beam_waists = " + d2s(beam_waist,8) );
 	}
 	
 	//estimate the depth of the PSF in pixels, smallest to get the job done
 	Z_dim = round( 3 * sqrt(beam_width_z_squared) / res_Z );
+	print( "  NAobj = " + d2s(NA_objective,4) + ", resZ = " + d2s(res_Z,4) + ", RIimm = " + RI_immersion );
 	//print ( "Zdim: " + d2s(Z_dim,4) + "\n" );
 	Z_dim = return_odd_pixel_dimension( Z_dim );
 	if ( isNaN(Z_dim) ) {
 		Z_dim = 31;
 	}
-	//FWHM is 2ln2 times w0
 	
 	//next estimate smallest XY size possible to get the job done
 	XY_dim = return_odd_pixel_dimension( 9000 / (NA_objective * res_XY * RI_immersion) ); //30 = k * / 0.9(NA) * 250(XY) * 1(RIi)
@@ -77,18 +115,15 @@ function LS_PSF_generator ( NA_objective, NA_lightsheet, RI_immersion, RI_sample
 	
 	output_file = output_file + "NY=" + d2s(XY_dim,0) + "\nNX=" + d2s(XY_dim,0) + "\nNZ=" + d2s(Z_dim,0) + "\nType=16-bits\n"; //dimensions and color depth of output PSF
 	
-	//get additional objective data from string objective name
-	WD_CS_return = WDforObjective( Olightsheet );
-	
 	//finish working on the file -- this allows PSF generator to create detection PSF
 	output_file = output_file + "NA=" + d2s(NA_objective,6) + "\nLUT=Grays\nLambda=" + d2s(lambda_detection,4) + "\nScale=Linear\n";
-	output_file = output_file + "psf-GL-NI=" + d2s(RI_immersion,4) + "\npsf-GL-NS=" + d2s(RI_sample,4) + "\npsf-GL-accuracy=Good\npsf-GL-ZPos=" + d2s(WD_CS_return[1],1) + "\npsf-GL-TI=" + d2s(WD_CS_return[0],1) + "\n";	
+	output_file = output_file + "psf-GL-NI=" + d2s(RI_immersion,4) + "\npsf-GL-NS=" + d2s(RI_sample,4) + "\npsf-GL-accuracy=Good\npsf-GL-ZPos=" + d2s(CS_return,1) + "\npsf-GL-TI=" + d2s(WD_return,1) + "\n";	
 	
 	//now, work on illumination PSF
 	rand_num = d2s(floor(random() * 1000000 ),0);
 	LS_ill_PSF = "Ill-PSF-" + rand_num;
 	//name_newimage = "Ill-PSF-" + rand_num;
-	//midpoint_Z_dim = floor(Z_dim/2) + (WD_CS_return[0]/res_Z); // what is the center of the beam?
+	//midpoint_Z_dim = floor(Z_dim/2) + (WD_return/res_Z); // what is the center of the beam?
 	midpoint_Z_dim = floor(Z_dim/2);
 	newImage("Ill-PSF-" + rand_num, "16-bit black", 1, 1, Z_dim );
 	
@@ -132,9 +167,9 @@ function LS_PSF_generator ( NA_objective, NA_lightsheet, RI_immersion, RI_sample
 	return name_newimage;
 }
 
-function WDforObjective(Olightsheet) {
+function Zeiss_WDforObjective(Olightsheet) {
 	//returns working distance and coverslip thickness (i.e. depth to sample) of the objective
-	return_array = newArray(2);
+	return_array = newArray(3); // WD, coverslip, nominal RIimmersion
 	Array.fill(return_array, 0 );
 	if (startsWith( Olightsheet, "W " ) ) {
 		//probably water dipping objective
@@ -149,17 +184,20 @@ function WDforObjective(Olightsheet) {
 		} else if (matches(Olightsheet, ".*63\(x\|X\).*" ) ) {
 			return_array[0] = 2100;
 		}
+		return_array[2] = 1.333;
 	} else if (startsWith(Olightsheet, "Clr " ) || startsWith(Olightsheet, "LSFM cl" )) {
 		//probably clearing objective
 		if (matches(Olightsheet, ".*20\(x\|X\).*" ) ) {
 			return_array[0] = 5600;	
 		}	
+		return_array[2] = 1.45;
 	} else if (startsWith(Olightsheet, "EC " )) {
 		//probably clearing objective
 		if (matches(Olightsheet, ".*5\(x\|X\).*" ) ) {
 			return_array[0] = 18500;
 			return_array[1] = 170;
-		}	
+			return_array[2] = 1.333;
+		}
 	} else {
 		print ("The working distance and coverslip are not defined for " + Olightsheet + " \n");
 	}
@@ -167,12 +205,76 @@ function WDforObjective(Olightsheet) {
 	return return_array;
 }
 
+function UM2_WDforObjective(Olightsheet) {
+	//returns working distance and coverslip thickness (i.e. depth to sample) of the objective
+	return_array = newArray(3); // WD, coverslip (always 0), NA
+	Array.fill(return_array, 0 );
+	
+	if (startsWith( Olightsheet, "mi plan " ) ) { // LaVision UM2
+		//probably water dipping objective
+		if (matches(Olightsheet, ".*1\.1\(x\|X\).*" ) ) {
+			if (matches(Olightsheet, ".*dc57.*" ) ) {
+				return_array[0] = 17600;
+			} else if (matches(Olightsheet, ".*dc40.*" ) ) {
+				return_array[0] = 16000;
+			}
+			return_array[2] = 0.1;	
+		} else if (matches(Olightsheet, ".*4\(x\|X\).*" ) ) {
+			if (matches(Olightsheet, ".*dc57.*" ) ) {
+				return_array[0] = 16000;
+			} else if (matches(Olightsheet, ".*dc49.*" ) ) {
+				return_array[0] = 16000;
+			} else if (matches(Olightsheet, ".*dc33.*" ) ) {
+				return_array[0] = 16000;
+			}
+			return_array[2] = 0.35;	
+		} else if (matches(Olightsheet, ".*12\(x\|X\).*" ) ) {
+			if (matches(Olightsheet, ".*dc57.*" ) ) {
+				return_array[0] = 10000;
+			} else if (matches(Olightsheet, ".*dc49.*" ) ) {
+				return_array[0] = 10900;
+			} else if (matches(Olightsheet, ".*dc33.*" ) ) {
+				return_array[0] = 8500;
+			}	
+			return_array[2] = 0.53;	
+		}
+	} else {
+		print ("The working distance and coverslip are not defined for " + Olightsheet + " \n");
+	}
+	//print ("LaVision: " + d2s(return_array[0],0) + " " + d2s(return_array[1],0) );
+	return return_array;
+}
+
+function return_parse_xml_line_for_value ( inString ) {
+	//print( "checking for value in " + inString );
+	inString = toLowerCase(inString);
+	
+	start_index = indexOf(inString, "value=\"") +7;
+	//print( "   ...at " + d2s(start_index+6,0) );
+	
+	if ( start_index < 0 ) {
+		return ""
+	}
+	subline = substring(inString, start_index );
+	//print( "   ... " + subline );
+	stop_index = indexOf(subline, "\"" );
+	
+	if ( stop_index < 0 ) {
+		return ""
+	}
+	
+	subline = substring(subline, 0, stop_index );
+	//print( "   ... " + subline );
+	
+	return subline ;
+}
+
 function return_odd_pixel_dimension( dimension ) {
 
 	//print( "return_odd_pixel_dimension: " + d2s(dimension,2) );
 	if ( dimension <= 0 ) {
 		print ("Problem with negative or zero dimension in return_odd_pixel_dimension\n");
-		return ( NaN );
+		return NaN;
 	//} else if ( dimension < 4 ) {
 	//	return 3;
 	} else if ( dimension < 8 ) {
@@ -197,7 +299,8 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 	processList = newArray(0);
 	unique_PSF_filenames = newArray(0);
 	unique_PSF_parameters = newArray(0);	
-	run("Bio-Formats Macro Extensions");	
+	run("Bio-Formats Macro Extensions");
+	type = "";
 	
 	if ( folder_in_batch ) {
 		if ( directory == "" || !File.exists(directory) ) {
@@ -206,16 +309,29 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 		}
 		fileList = getFileList(directory);
 
-		//Count the maximum number of positions and slices in dataset
+		// identify type / format of dataset
 		for (i=0; i<fileList.length; i++) {
-			if (endsWith(fileList[i], ".czi")) {
-				
+			if (endsWith(fileList[i], ".czi")) { // Zeiss Z.1 CZI format
+				type = ".czi";
+				break;
+			} else if (endsWith(fileList[i], "Z0000.ome.tif")) { // OME format, possibly UM2
+				type = "Z0000.ome.tif";
+				break;
+			}
+		}
+		for (i=0; i<fileList.length; i++) {
+			if (endsWith(fileList[i], type )) {
 				//now, remove .czi from end of filename
-				name_ext = split(fileList[i],".");
+				
+				filepaddedname = substring(fileList[i], 0, indexOf(fileList[i], type) );
+				
+				/*name_ext = split(fileList[i],".");
 				filepaddedname = "";
 				for (n=0; n<name_ext.length-1; n++) {
 					filepaddedname += name_ext[n];
-				}
+				}*/
+				
+				//print( "    " + name_ext[0] + " " + name_ext[0] + " " + name_ext[0] + " " + name_ext[0] + " " + name_ext[0] + " " +);
 	
 				//get ready to rename on save
 				if ( endsWith(filepaddedname,".") ) { //additional trailing periods should be removed
@@ -223,6 +339,7 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 						filepaddedname = substring(filepaddedname,0,filepaddedname.length);					
 					}
 				}
+				
 				processList = Array.concat( processList, filepaddedname + "///" + fileList[i] ); //new name will consist of padded old name so we can sort correctly by timepoint
 			}
 		}
@@ -230,13 +347,22 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 		path = File.openDialog("Select a File");
   		directory = File.getParent(path);
   		name = File.getName(path);		
-		name_ext = split(name,".");
+		//name_ext = split(name,".");
+
+		if (endsWith(name, ".czi")) { // Zeiss Z.1 CZI format
+			type = ".czi";
+		} else if (endsWith(name, "Z0000.ome.tif")) { // OME format, possibly UM2
+			type = "Z0000.ome.tif";
+		}
 		
 		//now, remove .czi from end of filename
-		filepaddedname = "";
+		/*filepaddedname = "";
 		for (n=0; n<name_ext.length-1; n++) {
 			filepaddedname += name_ext[n];
-		}
+		}*/
+		
+		filepaddedname = substring(fileList[i], 0, indexOf(fileList[i], type) );
+		
 		//get ready to rename on save
 		if ( endsWith(filepaddedname,".") ) { //additional trailing periods should be removed
 			while( endsWith(filepaddedname,".") ) {
@@ -251,7 +377,8 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 	}	
 	
 	Array.sort(processList); //sort files by their intended name, not true name
-	RIlightsheet = 0;
+	//RIlightsheet = 0;
+	//Olightsheet = "";
 	max_channels = 0;
     max_time = 0;
 	this_time = 0;
@@ -260,154 +387,227 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 	setBatchMode(true);
 
 	for (i=0; i<processList.length; i++) {
-		print( "Preparing " + directory + file_sep + name_ext[1] + " for deconvolution..." );
 		name_ext = split(processList[i],"///");
 		file = directory + file_sep + name_ext[1];
+		print( "Preparing " + directory + file_sep + name_ext[1] + " for deconvolution..." );
 		
 		Ext.setId(file);
 		Ext.getSeriesCount(nPositions);
-		
-		//get refractive index
-		//although this will retrieve metadata only from active series, refractive index is not different for each channel or view but instead is the same for everything
-		Ext.getMetadataValue("Information|Image|RefractiveIndex #1", RIlightsheet);
-		if ( RIlightsheet == 0 ) {
-			Ext.getMetadataValue("Information|Image|RefractiveIndex", RIlightsheet);
-		}
-		//print ( "Metadata: \n" + metadata_value  + "\n" ); exit();	
-			
-		//get objective name
-		Ext.getMetadataValue("Experiment|AcquisitionBlock|AcquisitionModeSetup|Objective #1", Olightsheet);
-		if ( Olightsheet == "" || Olightsheet == 0 ) {
-			Ext.getMetadataValue("Experiment|AcquisitionBlock|AcquisitionModeSetup|Objective", Olightsheet);
-		}
-	
-		
+
+		RIlightsheet = 0;
+		Olightsheet = "";
+		WD_CS_return = newArray(3);
+		Array.fill(WD_CS_return,0);
+
 		//get view angles, again metadata permeates all series and these values can be extracted with any series open
 		string_angles = newArray(nPositions);
 		angles = newArray(nPositions);
+
 		Array.fill(string_angles,NaN); // default angle is NaN
 		Array.fill(angles,NaN); // default angle is NaN
 		
-		//grab initial angles from file
-		if ( nPositions < 1) {
-			print ( "Fewer than one view/position present in file " + directory + file_sep + name_ext[1] + "!\n" );
-			continue;
-		} else {
-			//fill angles array
-			for(a=0; a<nPositions; a++) {
-				Ext.getMetadataValue("Information|Image|V|View|Offset #" + d2s((a+1),0), string_angles[a]);
+		if ( type == ".czi" ) {
+			//get refractive index
+			//although this will retrieve metadata only from active series, refractive index is not different for each channel or view but instead is the same for everything
+			Ext.getMetadataValue("Information|Image|RefractiveIndex #1", RIlightsheet);
+			if ( RIlightsheet == 0 ) {
+				Ext.getMetadataValue("Information|Image|RefractiveIndex", RIlightsheet);
+			}
+			//print ( "Metadata: \n" + metadata_value  + "\n" ); exit();
+
+			//get objective name
+			Ext.getMetadataValue("Experiment|AcquisitionBlock|AcquisitionModeSetup|Objective #1", Olightsheet);
+			if ( Olightsheet == "" || Olightsheet == 0 ) {
+				Ext.getMetadataValue("Experiment|AcquisitionBlock|AcquisitionModeSetup|Objective", Olightsheet);
 			}
 			
-			//fill actual angles array with numbers
-			for(a=0; a<nPositions; a++) {
-				angles[a] = parseFloat( string_angles[a]);
+			WD_CS_return = Zeiss_WDforObjective( Olightsheet );
+			if ( WD_CS_return[2] > RIlightsheet ) {
+				RIlightsheet = WD_CS_return[2];
+			}
+
+			//grab initial angles from file
+			if ( nPositions < 1) {
+				print ( "Fewer than one view/position present in file " + directory + file_sep + name_ext[1] + "!\n" );
+				continue;
+			} else {
+				//fill angles array
+				for(a=0; a<nPositions; a++) {
+					Ext.getMetadataValue("Information|Image|V|View|Offset #" + d2s((a+1),0), string_angles[a]);
+				}
+
+				//fill actual angles array with numbers
+				for(a=0; a<nPositions; a++) {
+					angles[a] = parseFloat( string_angles[a]);
+				}
+			}
+
+			//modify angles to try to put front at zero degrees
+			if ( nPositions == 1 ) {
+				//set only available angle to zero degrees
+				angles[0] = 0;
+			} else { // 2 or more angles
+
+				//first, figure out whether we should use angles from -180 to +180, or 0 to 360 -- to do this, if the difference between the largest and smallest angles is greater than 180, use -180 to 180 rather than 0 to 360
+				//fill sort angles array
+				sort_angles = Array.copy(angles);
+				Array.sort(sort_angles);
+
+				if ( sort_angles[sort_angles.length-1] - sort_angles[0] > 180 ) {
+					//modify angles to use -180 to 180
+					for ( a=0; a<angles.length; a++ ) {
+						if ( angles[a] > 180 ) {
+							angles[a] -= 360;
+						}
+					}
+
+					//redo sort_angles array now since angles have been modified
+					sort_angles = Array.copy(angles);
+					Array.sort(sort_angles);
+				}
+
+				if( nPositions == 2 ) {
+					abs_diff = sort_angles[1] - sort_angles[0];
+
+					if ( abs_diff < 180.2 && abs_diff > 179.8 ) { // views are opposing, so assume one is front and one is back
+						//set view 1 to angle 0 and view 2 to angle 180, then be done
+						angles[0] = 0;
+						angles[1] = 180;
+					} else if (angles[1]>=angles[0])  { // views are not opposing and second view has greater angle than first view, so assume that front is actually midpoint of the two views -- and set that to 0 degrees
+						angles[0] = 360 - (abs_diff /2);
+						angles[1] = abs_diff/2;
+					} else { // views are not opposing and first view has greater angle than second view, so assume that front is actually midpoint of the two views -- and set that to 0 degrees
+						angles[1] = 360 - (abs_diff /2);
+						angles[0] = abs_diff/2;
+					}
+				} else { // 3 or more positions, so zero the middle view if odd or view right before middle view (assume views done left-front-right-back or right-front-left-back)
+					//zero the second view
+					middle_view = floor((angles.length / 2) - 0.5);
+	                		diff_angle = angles[middle_view];
+					for ( a=0; a<angles.length; a++ ) {
+						angles[a] -= diff_angle;
+
+						if ( angles[a] < -180 ) {
+							angles[a] += 360;
+						} else if ( angles[a] >= 360 ) {
+							angles[a] -= 360;
+						}
+					}
+				}
+
+				//okay, now correct angles for 0 to 360, regardless of which scheme we used above
+				for ( a=0; a<angles.length; a++ ) {
+					if ( angles[a] >= 360 ) {
+						angles[a] -= 360;
+					} else if ( angles[a] < 0 ) {
+						angles[a] += 360;
+					}
+				}
 			}
 		}
 
-		//modify angles to try to put front at zero degrees
 		if ( nPositions == 1 ) {
-			//set only available angle to zero degrees
-			angles[0] = 0;
-		} else { // 2 or more angles
-		
-			//first, figure out whether we should use angles from -180 to +180, or 0 to 360 -- to do this, if the difference between the largest and smallest angles is greater than 180, use -180 to 180 rather than 0 to 360
-			//fill sort angles array
-			sort_angles = Array.copy(angles);
-			Array.sort(sort_angles);
-			
-			if ( sort_angles[sort_angles.length-1] - sort_angles[0] > 180 ) {
-				//modify angles to use -180 to 180
-				for ( a=0; a<angles.length; a++ ) {
-					if ( angles[a] > 180 ) {
-						angles[a] -= 360;
-					}
-				}
-				
-				//redo sort_angles array now since angles have been modified
-				sort_angles = Array.copy(angles);
-				Array.sort(sort_angles);
-			}
-			
-			if( nPositions == 2 ) {
-				abs_diff = sort_angles[1] - sort_angles[0];
-				
-				if ( abs_diff < 180.2 && abs_diff > 179.8 ) { // views are opposing, so assume one is front and one is back
-					//set view 1 to angle 0 and view 2 to angle 180, then be done
-					angles[0] = 0;
-					angles[1] = 180;
-				} else if (angles[1]>=angles[0])  { // views are not opposing and second view has greater angle than first view, so assume that front is actually midpoint of the two views -- and set that to 0 degrees
-					angles[0] = 360 - (abs_diff /2);
-					angles[1] = abs_diff/2;
-				} else { // views are not opposing and first view has greater angle than second view, so assume that front is actually midpoint of the two views -- and set that to 0 degrees
-					angles[1] = 360 - (abs_diff /2);
-					angles[0] = abs_diff/2;
-				}
-			} else { // 3 or more positions, so zero the middle view if odd or view right before middle view (assume views done left-front-right-back or right-front-left-back)
-				//zero the second view 
-				middle_view = floor((angles.length / 2) - 0.5);
-                		diff_angle = angles[middle_view];
-				for ( a=0; a<angles.length; a++ ) {
-					angles[a] -= diff_angle;
-					
-					if ( angles[a] < -180 ) {
-						angles[a] += 360;	
-					} else if ( angles[a] >= 360 ) {
-						angles[a] -= 360;	
-					}
-				}
-			}
-			
-			//okay, now correct angles for 0 to 360, regardless of which scheme we used above
-			for ( a=0; a<angles.length; a++ ) {
-				if ( angles[a] >= 360 ) {
-					angles[a] -= 360;
-				} else if ( angles[a] < 0 ) {
-					angles[a] += 360;
-				}
-			}
+			angles[0] = 0; // first angle is 0
 		}
 		
 		//get lightsheet data for each channel
 		num_channels = 0;
-        num_time = 0;
+	    num_time = 0;
 		max_time = 0;
-		for(a=0; a<nPositions; a++) {	
+		max_width = 0;
+		for(a=0; a<nPositions; a++) {
+			dim_width = 0;
+				
 			Ext.setSeries(a);
 			Ext.getSizeC(num_channels);
-            Ext.getSizeT(num_time);
+	        Ext.getSizeT(num_time);
+			Ext.getSizeX(dim_width);
 			
 			if ( num_channels > max_channels ) {
 				max_channels = num_channels;
 			}
 			if ( num_time > max_time ) {
 				max_time = num_time;
-			}			
+			}
+			if ( dim_width > max_width ) {
+				max_width = dim_width;
+			}
 		}
+		
 		NAlightsheets = newArray(max_channels);
 		NAdetections = newArray(max_channels);
 		WLlightsheets = newArray(max_channels);
 		WLdetections = newArray(max_channels);
+		Rayleigh_dist_calc_waist = max_width/5; // default waist is 20% of total x dimension of image -- really should consider this per channel per position (not just per channel), but most likely positions will all have same dim_width
 
 		Array.fill(NAlightsheets,0); // default NA is 0
 		Array.fill(NAdetections,0); // default NA is 0
 		Array.fill(WLlightsheets,0); // default WL is 0
 		Array.fill(WLdetections,0); // default WL is 0
 
-		for(a=0; a<max_channels; a++) {
-			Ext.getMetadataValue("Information|Image|Channel|NALightSheet #" + d2s((a+1),0), NAlightsheets[a]);
-			Ext.getMetadataValue("Information|Image|Channel|NADetection #" + d2s((a+1),0), NAdetections[a]);			
-			Ext.getMetadataValue("Information|Image|Channel|IlluminationWavelength|SinglePeak #" + d2s((a+1),0), WLlightsheets[a]);
-			Ext.getMetadataValue("Information|Image|Channel|DetectionWavelength|SinglePeak #" + d2s((a+1),0), WLdetections[a]);
-			
-			print( "  ..examining " + name_ext[0] + " ...channel " + d2s(a,0) + " parameters: NAill " + d2s(NAlightsheets[a],6) + ", NAdet " + d2s(NAdetections[a],6) + ", WLill " + d2s(WLlightsheets[a],2) + ", WLdet " + d2s(WLdetections[a],2) );
+		if ( type == ".czi" ) {
+			for(a=0; a<max_channels; a++) {
+				Ext.getMetadataValue("Information|Image|Channel|NALightSheet #" + d2s((a+1),0), NAlightsheets[a]);
+				Ext.getMetadataValue("Information|Image|Channel|NADetection #" + d2s((a+1),0), NAdetections[a]);
+				Ext.getMetadataValue("Information|Image|Channel|IlluminationWavelength|SinglePeak #" + d2s((a+1),0), WLlightsheets[a]);
+				Ext.getMetadataValue("Information|Image|Channel|DetectionWavelength|SinglePeak #" + d2s((a+1),0), WLdetections[a]);
+				
+				print( "  ..examining " + name_ext[0] + " ...channel " + d2s(a,0) + " parameters: NAill " + d2s(NAlightsheets[a],6) + ", NAdet " + d2s(NAdetections[a],6) + ", WLill " + d2s(WLlightsheets[a],2) + ", WLdet " + d2s(WLdetections[a],2) );
+			}			
+				
+
 		}
-		
+
 		for (t=0; t<max_time; t++ ) {		
 			for(a=0; a<nPositions; a++) {
 				if ( nPositions == 1 ) {
 					run("Bio-Formats", "open=[" + file + "] color_mode=Default rois_import=[ROI manager] specify_range view=Hyperstack stack_order=XYCZT " + " t_begin=" + d2s(t+1,0) + " t_end=" + d2s(t+1,0) + " t_step=1" );	
 				} else {
 					run("Bio-Formats", "open=[" + file + "] color_mode=Default rois_import=[ROI manager] specify_range view=Hyperstack stack_order=XYCZT series_"+ d2s(a+1,0) + " t_begin_" + d2s(a+1,0) + "=" + d2s(t+1,0) + " t_end_" + d2s(a+1,0) + "=" + d2s(t+1,0) + " t_step_" + d2s(a+1,0) + "=1" );
+				}
+				
+				//Get data from this particular stack if UM2
+				if ( type == "Z0000.ome.tif" ) {
+					open( file );
+					infoData=getMetadata("Info");
+					close();
+					/*
+			 		* fname="UltraII LRI" nTy="3" nId="524292" Value="1.550000"
+			 		* fname="UltraII ObjectiveName" nTy="5" nId="524292" Value="MI Plan 1.1x DC57"
+			 		* fname="UltraII ExBeamWaist" nTy="1" nId="262148" Value="3.300000"/>
+			 		* label="UltraII Sheet thickness FWHM micron" fname="UltraII SheetThickness" nTy="3" nId="524292" Value="3.889772"/>
+			 		* label="UltraII Na Value" fname="UltraII NAValue" nTy="3" nId="524292" Value="0.156093"/>
+			 		* fname="UltraII Wavelength0" nTy="2" nId="524292" Value="561"/>
+				 	* fname="UltraII EmWavelength0" nTy="2" nId="524292" Value="620"/>
+				 	* <ExcitationWL ExcitationWL="488"/>
+			 		* <EmissionWL EmissionWL="525"/>
+			 		* <Pixels ID="Pixels:25492249-EF27-4C5C-9DC5-D4343416BCD4" DimensionOrder="XYZTC" PixelType="uint16" BigEndian="false" SizeX="1772" SizeY="1742" SizeZ="1117" SizeT="1" SizeC="1" PhysicalSizeX="3.559694" PhysicalSizeY="3.559693" PhysicalSizeZ="1.700000">
+				 	*/
+					infoString = split(infoData, "\n");
+					beam_waist = 0;
+					for ( l=0; l<infoString.length; l++ ) {
+						if (indexOf(infoString[l], "fname=\"UltraII LRI\"") >= 0) {
+							RIlightsheet = return_parse_xml_line_for_value(infoString[l]);
+						} else if (indexOf(infoString[l], "fname=\"UltraII ObjectiveName\"") >= 0) {
+							Olightsheet = return_parse_xml_line_for_value(infoString[l]);
+						} else if (indexOf(infoString[l], "fname=\"UltraII CurWLExcitation\"") >= 0) {
+							WLlightsheets[0] = return_parse_xml_line_for_value(infoString[l]);
+						} else if (indexOf(infoString[l], "fname=\"UltraII CurWLEmission\"") >= 0) {
+							WLdetections[0] = return_parse_xml_line_for_value(infoString[l]);							
+						} else if (indexOf(infoString[l], "fname=\"UltraII ExBeamWaist\"") >= 0) {
+							beam_waist = return_parse_xml_line_for_value(infoString[l]);
+						} 
+					}
+		
+					WD_CS_return = UM2_WDforObjective( Olightsheet );
+					NAdetections[0] = d2s(WD_CS_return[2],1);
+
+					//calculate lightsheet NA					
+					// beam_waist = RI_immersion * lambda_lightsheet / ( NA_lightsheet * PI );
+					//NA = (1.55) * .488 / ( PI * 3.889772 )
+					//	( PI * 3.889772 ) = 12.22						
+					NAlightsheets[0] = d2s(RIlightsheet * WLlightsheets[0]/1000 / ( PI * beam_waist),10);
+					
 				}
 				
 				//Get name of opened stack	
@@ -448,6 +648,8 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 					print ( "Unexpected XY scale difference: " + d2s(vox_height,5) + " vs. " + d2s(vox_width,5) + " for " + file + ", series " + d2s(a,0) + "\n" );
 					continue;
 				}
+
+				print( "  ..examining " + name_ext[0] + " ...series " + d2s(a,0) + " attributes: Xdim (nm): " + d2s(dim_width*vox_width,2) + ", Ydim (nm): " + d2s(dim_height*vox_height,2) + ", Zdim (nm): " + d2s(dim_slices*vox_depth,2) );
 		
 				//Split channels and record names of each new image stack
 				channelList = newArray(0);
@@ -460,6 +662,18 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 					channelList = Array.concat( channelList, title );
 				} else {
 					continue; //skip this series altogether	
+				}
+				
+				if ( type == "Z0000.ome.tif" ) {
+					for (b=0; b<channelList.length; b++ ) {
+						if ( b > 0 ) {
+							WLlightsheets[b] = WLlightsheets[0];
+							WLdetections[b] = WLdetections[0];
+							NAdetections[b] = NAdetections[0];
+							NAlightsheets[b] = NAlightsheets[0];
+						}
+						print( "  ..examining " + name_ext[0] + " ...channel " + d2s(b,0) + " parameters: NAill " + d2s(NAlightsheets[b],6) + ", NAdet " + d2s(NAdetections[b],6) + ", WLill " + d2s(WLlightsheets[b],2) + ", WLdet " + d2s(WLdetections[b],2) );
+					}
 				}
 		
 				fileoutname = newArray(channelList.length);
@@ -481,7 +695,7 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 				for (b=0; b<channelList.length; b++ ) {
 					if ( NAlightsheets[b] > 0 && WLlightsheets[b] > 0 && RIlightsheet > 0 && !(isNaN(angles[a]) ) ) {
 						
-						this_PSF_identifier = NAdetections[b] + "//" + NAlightsheets[b] + "//" + RIlightsheet + "//" + WLlightsheets[b] + "//" + WLdetections[b] + "//" + d2s(vox_width,8) + "//" + d2s(vox_depth,8) + "//" + d2s(dim_width/5,8) + "//" + Olightsheet;
+						this_PSF_identifier = NAdetections[b] + "//" + NAlightsheets[b] + "//" + RIlightsheet + "//" + WLlightsheets[b] + "//" + WLdetections[b] + "//" + d2s(vox_width,8) + "//" + d2s(vox_depth,8) + "//" + d2s(Rayleigh_dist_calc_waist,8) + "//" + Olightsheet;
 						
 						//see if we have done this PSF before
 						is_match = -1;
@@ -509,7 +723,11 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 							setBatchMode("exit and display"); //needed for PSF generation
 							setBatchMode(false);
 
-							PSF_name = LS_PSF_generator ( parseFloat(NAdetections[b]), parseFloat(NAlightsheets[b]), parseFloat(RIlightsheet), 1.4, parseFloat(WLlightsheets[b]), parseFloat(WLdetections[b]), vox_width, vox_depth, dim_width/5, Olightsheet ); //estimate lightsheet radius from w(0) as being 1/4th the total width of the acquired image -- this should cut it about midway
+							tissue_RI = default_tissue_refractive_index;
+							if ( RIlightsheet > default_tissue_refractive_index ) {
+								tissue_RI = RIlightsheet;
+							}
+							PSF_name = LS_PSF_generator ( parseFloat(NAdetections[b]), parseFloat(NAlightsheets[b]), parseFloat(RIlightsheet), tissue_RI, parseFloat(WLlightsheets[b]), parseFloat(WLdetections[b]), vox_width, vox_depth, Rayleigh_dist_calc_waist, WD_CS_return[0], WD_CS_return[1] ); //estimate lightsheet radius from w(0) as being 1/4th the total width of the acquired image -- this should cut it about midway
 							selectWindow( PSF_name );
 							
 							
@@ -811,11 +1029,13 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 		if (endsWith(fileList[i], ".czi")) {
 			
 			//now, remove .czi from end of filename
-			name_ext = split(fileList[i],".");
+			/*name_ext = split(fileList[i],".");
 			filepaddedname = "";
 			for (n=0; n<name_ext.length-1; n++) {
 				filepaddedname += name_ext[n];
-			}
+			}*/
+			filepaddedname = substring(fileList[i], 0, fileList[i].length-4);
+			//print( fileList[i] + " -> " + filepaddedname );
 			
 			//filepaddedname = name_ext[0];
 			//print( "File " + d2s(i,0) + " ..." + filepaddedname + " " + fileList[i] );
@@ -883,18 +1103,19 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 		
 		//get refractive index
 		//although this will retrieve metadata only from active series, refractive index is not different for each channel or view but instead is the same for everything
+		RIlightsheet = 0;
 		Ext.getMetadataValue("Information|Image|RefractiveIndex #1", RIlightsheet);
 		if ( RIlightsheet == 0 ) {
 			Ext.getMetadataValue("Information|Image|RefractiveIndex", RIlightsheet);
 		}
-		//print ( "Metadata: \n" + metadata_value  + "\n" ); exit();	
-			
+		//print ( "Metadata: \n" + metadata_value  + "\n" ); exit();
+		
 		//get objective name
+		Olightsheet = "";
 		Ext.getMetadataValue("Experiment|AcquisitionBlock|AcquisitionModeSetup|Objective #1", Olightsheet);
 		if ( Olightsheet == "" || Olightsheet == 0 ) {
 			Ext.getMetadataValue("Experiment|AcquisitionBlock|AcquisitionModeSetup|Objective", Olightsheet);
 		}
-	
 		
 		//get view angles, again metadata permeates all series and these values can be extracted with any series open
 		string_angles = newArray(nPositions);
@@ -970,26 +1191,6 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 					}
 				}
 				
-				//below are alternative ways to zero the views
-				/*
-				//now, figure out outside angle around the farthest apart angles
-				abs_diff = sort_angles[nPositions-1] - sort_angles[0];
-				
-				//either way below we take the angle and subtract it from 360
-				if ( abs_diff > 180 ) { 
-					abs_diff = 360 - abs_diff; //a non-reflex angle defines the outside angle of the two farthest apart views
-					
-					//zero the closest angle to zero and adjust all other angles
-					
-					
-					
-				} else {
-					abs_diff = 360 - abs_diff;//a reflex angle defines the outside angle of the two farthest apart views
-					
-					//zero the average angle and adjust all other angles
-				}
-				
-				*/
 			}
 			
 			//okay, now correct angles for 0 to 360, regardless of which scheme we used above
@@ -1035,20 +1236,6 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 			Ext.getMetadataValue("Information|Image|Channel|DetectionWavelength|SinglePeak #" + d2s((a+1),0), WLdetections[a]);			
 		}
 		
-		//for(a=0; a<metadata_lines.length; a++) {
-		//	//get angles for each view
-		//	if ( startsWith(metadata_lines[a], "Information|Image|V|View|Offset #") ) {
-		//		for(b=1; b<=nPositions; b++) {
-		//			if ( startsWith(metadata_lines[a], "Information|Image|V|View|Offset #" + d2s(b,0)) ) {	
-		//				angles[b] = parseFloat( substring(metadata_lines[a], (indexOf(metadata_lines[a], "=") + 1)) );
-		//			}
-		//		}
-		//	//get refractive index, which is not different for each channel but instead is the same for everything
-		//	} else if ( startsWith(metadata_lines[a], "Information|Image|RefractiveIndex #") ) {
-		//		RIlightsheet = parseFloat( substring(metadata_lines[a], (indexOf(metadata_lines[a], "=") + 1)) );
-		//
-		//	}
-		//}
 		for (t=0; t<max_time; t++ ) {		
 			for(a=0; a<nPositions; a++) {
 				//print ("About to open " + "Bio-Formats", "open=[" + file + "] color_mode=Default rois_import=[ROI manager] specify_range view=Hyperstack stack_order=XYCZT series_"+ d2s(a+1,0) + " t_begin_" + d2s(a+1,0) + "=" + d2s(t+1,0) + " t_end_" + d2s(a+1,0) + "=" + d2s(t+1,0) + " t_step_" + d2s(a+1,0) + "=1" );
@@ -1060,13 +1247,6 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 				} else {
 					run("Bio-Formats", "open=[" + file + "] color_mode=Default rois_import=[ROI manager] specify_range view=Hyperstack stack_order=XYCZT series_"+ d2s(a+1,0) + " t_begin_" + d2s(a+1,0) + "=" + d2s(t+1,0) + " t_end_" + d2s(a+1,0) + "=" + d2s(t+1,0) + " t_step_" + d2s(a+1,0) + "=1" );
 				}
-				//
-				//Ext.setSeries(a);
-				//Ext.getMetadataValue("Information|Image|RefractiveIndex #1", RIlightsheet);
-				
-				//run("Bio-Formats", "open=[/home/martindominguez/Downloads/DSLM Processing/12-6 embryo 1 time 0 0.czi] color_mode=Default  specify_range split_channels view=Hyperstack stack_order=XYCZT series_1 c_begin_1=1 c_end_1=2 c_step_1=1 z_begin_1=1 z_end_1=274 z_step_1=1");
-				//selectWindow("12-6 embryo 1 time 0 0.czi - 12-6 embryo 1 time 0 0 #1 - C=0");
-				//selectWindow("12-6 embryo 1 time 0 0.czi - 12-6 embryo 1 time 0 0 #1 - C=1");		
 				
 				//Get name of opened stack	
 				rand_num = floor(random() * 1000000 );
@@ -1134,6 +1314,7 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 				
 				//do PSFs separately since they require batchmode to be off
 				for (b=0; b<channelList.length; b++ ) {
+					//print( "c"+b + ": " + d2s(NAlightsheets[b],4) + " " +  d2s(WLlightsheets[b],4) + " " + d2s(RIlightsheet,4) + " " + d2s(angles[a],4) );
 					if ( NAlightsheets[b] > 0 && WLlightsheets[b] > 0 && RIlightsheet > 0 && !(isNaN(angles[a]) ) ) {
 						
 						this_PSF_identifier = NAdetections[b] + "//" + NAlightsheets[b] + "//" + RIlightsheet + "//" + WLlightsheets[b] + "//" + WLdetections[b] + "//" + d2s(vox_width,8) + "//" + d2s(vox_depth,8) + "//" + d2s(dim_width/5,8) + "//" + Olightsheet;
@@ -1161,7 +1342,13 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 							setBatchMode("exit and display"); //needed for PSF generation
 							setBatchMode(false);
 
-							PSF_name = LS_PSF_generator ( parseFloat(NAdetections[b]), parseFloat(NAlightsheets[b]), parseFloat(RIlightsheet), 1.4, parseFloat(WLlightsheets[b]), parseFloat(WLdetections[b]), vox_width, vox_depth, dim_width/5, Olightsheet ); //estimate lightsheet radius from w(0) as being 1/4th the total width of the acquired image -- this should cut it about midway
+							WD_CS_return = Zeiss_WDforObjective( Olightsheet );
+							tissue_RI = default_tissue_refractive_index;
+							if ( RIlightsheet > default_tissue_refractive_index ) {
+								tissue_RI = RIlightsheet;
+							}
+							
+							PSF_name = LS_PSF_generator ( parseFloat(NAdetections[b]), parseFloat(NAlightsheets[b]), parseFloat(RIlightsheet), tissue_RI, parseFloat(WLlightsheets[b]), parseFloat(WLdetections[b]), vox_width, vox_depth, dim_width/5, WD_CS_return[0], WD_CS_return[1] ); //estimate lightsheet radius from w(0) as being 1/4th the total width of the acquired image -- this should cut it about midway
 							selectWindow( PSF_name );
 							
 							
@@ -1382,11 +1569,12 @@ function main_series_tif_to_anaglyphs(directory,outputDirectory) {
 		if ((startsWith(fileList[i], "LSFM_T") || startsWith(fileList[i], "Fused_T")) && endsWith(fileList[i], ".tif")) {
 
 			//now, remove .tif from end of filename
-			name_ext = split(fileList[i],".");
+			/*name_ext = split(fileList[i],".");
 			filepaddedname = "";
 			for (n=0; n<name_ext.length-1; n++) {
 				filepaddedname += name_ext[n];
-			}
+			}*/
+			filepaddedname = substring(fileList[i], 0, fileList[i].length-4);
 			
 			//ignore PSF files
 			if ( endsWith(filepaddedname, "_psf") ) {
@@ -1587,11 +1775,12 @@ function main_time_series_tif_to_mip(directory,outputDirectory) {
 		if (startsWith(fileList[i], "LSFM_") && endsWith(fileList[i], ".tif")) {
 
 			//now, remove .tif from end of filename
-			name_ext = split(fileList[i],".");
+			/*name_ext = split(fileList[i],".");
 			filepaddedname = "";
 			for (n=0; n<name_ext.length-1; n++) {
 				filepaddedname += name_ext[n];
-			}
+			}*/
+			filepaddedname = substring(fileList[i], 0, fileList[i].length-4);
 			
 			//ignore PSF files
 			if ( endsWith(filepaddedname, "_psf") ) {
@@ -1699,12 +1888,13 @@ function main_klb_to_mip(directory) {
 	for (i=0; i<fileList.length; i++) {
 		if (startsWith(fileList[i], "t0") && endsWith(fileList[i], ".klb")) {
 
-			//now, remove .tif from end of filename
-			name_ext = split(fileList[i],".");
+			//now, remove .klb from end of filename
+			/*name_ext = split(fileList[i],".");
 			filepaddedname = "";
 			for (n=0; n<name_ext.length-1; n++) {
 				filepaddedname += name_ext[n];
-			}
+			}*/
+			filepaddedname = substring(fileList[i], 0, fileList[i].length-4);
 
 			//now, segment filename into TXXXX_SX and then create view setup with "SX"
 			name_ext = split(filepaddedname,"_");
@@ -2193,11 +2383,12 @@ function main_tifseries_16bit_to_8bit(folder_in_batch,directory,outputDirectory)
   		name = File.getName(path);
 		
 		//now, remove .tif from end of filename
-		name_ext = split(name,".");
+		/*name_ext = split(name,".");
 		filepaddedname = "";
 		for (n=0; n<name_ext.length-1; n++) {
 			filepaddedname += name_ext[n];
-		}	
+		}*/
+		filepaddedname = substring(name, 0, name.length-4);
 
 		//fileList = Array.concat(fileList,name);
 		fileList_preview = getFileList(directory);
@@ -2205,11 +2396,12 @@ function main_tifseries_16bit_to_8bit(folder_in_batch,directory,outputDirectory)
 		
 		for (i=0; i<fileList_preview.length; i++) {
 			if (startsWith(fileList_preview[i], "LSFM__") && (endsWith(fileList_preview[i], ".tif")||endsWith(fileList_preview[i], ".zip"))) {
-				name_ext = split(fileList_preview[i],".");
+				/*name_ext = split(fileList_preview[i],".");
 				filepaddedname = "";
 				for (n=0; n<name_ext.length-1; n++) {
 					filepaddedname += name_ext[n];
-				}
+				}*/
+				filepaddedname = substring(fileList_preview[i], 0, fileList_preview[i].length-4);
 				
 				name_ext = split(filepaddedname,"(__)");
 				//print( "looking into adding " + filepaddedname + " to jobs list...");
@@ -2242,11 +2434,12 @@ function main_tifseries_16bit_to_8bit(folder_in_batch,directory,outputDirectory)
 		if (startsWith(fileList[i], "LSFM_") && (endsWith(fileList[i], ".tif")||endsWith(fileList[i], ".zip"))) {
 
 			//now, remove .tif from end of filename
-			name_ext = split(fileList[i],".");
+			/*name_ext = split(fileList[i],".");
 			filepaddedname = "";
 			for (n=0; n<name_ext.length-1; n++) {
 				filepaddedname += name_ext[n];
-			}
+			}*/
+			filepaddedname = substring(fileList[i], 0, fileList[i].length-4);
 			
 			//ignore PSF files
 			if ( endsWith(filepaddedname, "_psf") ) {
@@ -2849,11 +3042,12 @@ function main_stacks_to_partial_collapse (directory,collapse_Z_size_micron,overl
 		if ((startsWith(fileList[i], "LSFM_") || startsWith(fileList[i], "t000")) && endsWith(fileList[i], ".tif")) {
 
 			//now, remove .tif from end of filename
-			name_ext = split(fileList[i],".");
+			/*name_ext = split(fileList[i],".");
 			filepaddedname = "";
 			for (n=0; n<name_ext.length-1; n++) {
 				filepaddedname += name_ext[n];
-			}
+			}*/
+			filepaddedname = substring(fileList[i], 0, fileList[i].length-4);
 			
 			//ignore PSF files
 			if ( endsWith(filepaddedname, "_psf") ) {
@@ -2907,11 +3101,12 @@ function main_stacks_to_partial_collapse (directory,collapse_Z_size_micron,overl
 			if (startsWith(fileList[i], "t0") && endsWith(fileList[i], ".klb")) {
 	
 				//now, remove .tif from end of filename
-				name_ext = split(fileList[i],".");
+				/*name_ext = split(fileList[i],".");
 				filepaddedname = "";
 				for (n=0; n<name_ext.length-1; n++) {
 					filepaddedname += name_ext[n];
-				}
+				}*/
+				filepaddedname = substring(fileList[i], 0, fileList[i].length-4);
 	
 				//now, segment filename into TXXXX_SX and then create view setup with "SX"
 				name_ext = split(filepaddedname,"_");
@@ -3098,11 +3293,12 @@ function main_extract_defined_slices(directory) {
 		if ((startsWith(fileList[i], "LSFM_") || startsWith(fileList[i], "t000")) && endsWith(fileList[i], ".tif")) {
 
 			//now, remove .tif from end of filename
-			name_ext = split(fileList[i],".");
+			/*name_ext = split(fileList[i],".");
 			filepaddedname = "";
 			for (n=0; n<name_ext.length-1; n++) {
 				filepaddedname += name_ext[n];
-			}
+			}*/
+			filepaddedname = substring(fileList[i], 0, fileList[i].length-4);
 			
 			//ignore PSF files
 			if ( endsWith(filepaddedname, "_psf") ) {
@@ -3147,11 +3343,12 @@ function main_extract_defined_slices(directory) {
 			if (startsWith(fileList[i], "t0") && endsWith(fileList[i], ".klb")) {
 	
 				//now, remove .tif from end of filename
-				name_ext = split(fileList[i],".");
+				/*name_ext = split(fileList[i],".");
 				filepaddedname = "";
 				for (n=0; n<name_ext.length-1; n++) {
 					filepaddedname += name_ext[n];
-				}
+				}*/
+				filepaddedname = substring(fileList[i], 0, fileList[i].length-4);
 	
 				//now, segment filename into TXXXX_SX and then create view setup with "SX"
 				name_ext = split(filepaddedname,"_");
@@ -3571,47 +3768,13 @@ if (arglist == "" ) {
 	main_ijm_deconvolve_large_stack(list[0],list[1]);
 	//main_ijm_deconvolve_series(list[0],list[1],false);
 }
-
-
-macro "Set Display Range..." {
-	// Sets the display range of the active image.
-	getMinAndMax(min, max);
-	min = getNumber("Min:", min);
-	max = getNumber("Max:", max);
-	setMinAndMax(min, max);
+macro "Show LSFMProcessing installation instructions" {
+	show_instructions();	
 }
-macro "Deconvolve single .czi files with large stacks (folder in batch)..." {
-	main_ijm_deconvolve_large_stack(true,"","");
-	setBatchMode("exit and display");
-	print("DONE: Deconvolve CZIs with large stacks (folder in batch).");
+macro "  " {
+	// menu spacer
 }
-macro "Deconvolve single .czi files with large stacks (single file)..." {
-	main_ijm_deconvolve_large_stack(false,"","");
-	setBatchMode("exit and display");
-	print("DONE: Deconvolve CZIs with large stacks (single file).");
-}
-macro "Deconvolve .czi files in a time series (folder in batch)..." {
-	main_ijm_deconvolve_series("","",false);
-	setBatchMode("exit and display");
-	print("DONE: Deconvolve CZIs in a time series (folder in batch).");
-}
-macro "Deconvolve x2 (very slow) .czi files in a time series (folder in batch)..." {
-	main_ijm_deconvolve_series("","",true);
-	setBatchMode("exit and display");
-	print("DONE: Deconvolve x2 (very slow) CZIs in a time series (folder in batch).");
-}
-macro "Filter and unify z-depth of LSFM .tif files (best for time series; folder in batch)..." {
-	main_tifseries_16bit_to_8bit(true,"","");
-	setBatchMode("exit and display");
-	print("DONE: Convert LSFM .tif files with large stacks (best for time series; folder in batch).");
-}
-macro "Filter LSFM .tif files (single file)..." {
-	main_tifseries_16bit_to_8bit(false,"","");
-	setBatchMode("exit and display");
-	print("DONE: Convert and filter LSFM .tif files to 8-bit (single file).");
-}
-
-macro "Change LSFM processing settings..." {
+macro "0. Change LSFM processing settings..." {
 	Dialog.create("LSFM processing settings...");
 	Dialog.setInsets(0,0,0);
 	Dialog.addMessage("LSFM .czi deconvolution settings...",16,"Black");
@@ -3643,29 +3806,50 @@ macro "Change LSFM processing settings..." {
 	fixed_precipitate_removal = Dialog.getCheckbox();	
 	fixed_blob_removal = Dialog.getCheckbox();	
 }
-macro "Convert LSFM .tif time series to z-MIP anaglyphs (folder in batch)..." {
+macro "1. Deconvolve Z.1 or UM2 acquisitions with large stacks (folder in batch)." {
+	main_ijm_deconvolve_large_stack(true,"","");
+	setBatchMode("exit and display");
+	print("DONE: Deconvolve Z.1 or UM2 acquisitions with large stacks (folder in batch).");
+}
+macro "1. Deconvolve single Z.1 or UM2 acquisitions with large stacks (single file)..." {
+	main_ijm_deconvolve_large_stack(false,"","");
+	setBatchMode("exit and display");
+	print("DONE: Deconvolve single Z.1 or UM2 acquisitions with large stacks (single file).");
+}
+macro "1. Deconvolve Z.1 time series .czi files (folder in batch)..." {
+	main_ijm_deconvolve_series("","",false);
+	setBatchMode("exit and display");
+	print("DONE: Deconvolve Z.1 time series .czi files (folder in batch).");
+}
+macro "1. Deconvolve x2 (very slow) Z.1 time series .czi files (folder in batch)..." {
+	main_ijm_deconvolve_series("","",true);
+	setBatchMode("exit and display");
+	print("DONE: Deconvolve x2 (very slow) Z.1 time series .czi files (folder in batch).");
+}
+macro "2. Filter and unify z-depth of LSFM .tif files (best for time series; folder in batch)..." {
+	main_tifseries_16bit_to_8bit(true,"","");
+	setBatchMode("exit and display");
+	print("DONE: Convert LSFM .tif files with large stacks (best for time series; folder in batch).");
+}
+macro "2. Filter LSFM .tif files (single file)..." {
+	main_tifseries_16bit_to_8bit(false,"","");
+	setBatchMode("exit and display");
+	print("DONE: Convert and filter LSFM .tif files to 8-bit (single file).");
+}
+macro "3. BigStitcher (PLEASE split fused h5/xml images to 1 timepoint and 1 setup per partition)..." {
+	run("BigStitcher");
+}
+macro "3. Convert LSFM .tif time series to z-MIP anaglyphs (folder in batch)..." {
 	main_series_tif_to_anaglyphs("","");
 	setBatchMode("exit and display");
 	print("DONE: Convert LSFM .tif time series to z-MIP anaglyphs (folder in batch).");
 }
-macro "Convert LSFM .tif files to z-MIPs (folder in batch)..." {
+macro "3. Convert LSFM .tif files to z-MIPs (folder in batch)..." {
 	main_time_series_tif_to_mip("","");
 	setBatchMode("exit and display");
 	print("DONE: Convert LSFM .tif files to z-MIPs (folder in batch).");
 }
-macro "Convert t0XXXX .klb files to anaglyphs or MIPs (folder in batch)..." {
-	main_klb_to_mip("");
-	setBatchMode("exit and display");
-	print("DONE: Convert t0XXXX .klb files to anaglyphs or MIPs (folder in batch).");
-}
-
-macro "Process t0XXXX MIPs (folder in batch) to AVIs..." {
-	main_mip_to_avi();	
-	setBatchMode("exit and display");
-	print("DONE: Process t0XXXX MIPs (folder in batch) to AVIs.");
-}
-
-macro "Convert .tif (folder in batch) to AVIs..." {
+macro "3. Convert .tif (folder in batch) to AVIs..." {
 	directory = getDirectory("Choose input directory");
 	fileList = getFileList(directory);
 	fr = getNumber("Framerate (fps):", 12);
@@ -3691,26 +3875,57 @@ macro "Convert .tif (folder in batch) to AVIs..." {
 	setBatchMode("exit and display");
 	print("DONE: Convert .tif (folder in batch) to AVIs.");
 }
-
-macro "Convert LSFM .tif or t0XXXX .klb files to partially collapsed Z-stacks..." {
+macro "4. Convert fused .h5 to .klb (folder in batch, requires h5/xml split to 1 timepoint and 1 setup per partition)..." {
+	directory = getDirectory("Choose h5/xml input directory");
+	
+	if ( !File.exists(path_dataset_folder_export_all_h5_to_klb_pyklb) ) {
+		path_dataset_folder_export_all_h5_to_klb_pyklb = File.openDialog("Please locate python script: dataset_folder_export_all_h5_to_klb_pyklb.py");
+	}
+	
+	Dialog.create("Choose bitdepth...");
+	Dialog.addChoice("Bits per pixel:",newArray("8","16"), "16")
+	Dialog.show();
+	
+	outbits = "16";
+	outbits = Dialog.getChoice();
+	print( "calling: python3 " + path_dataset_folder_export_all_h5_to_klb_pyklb + " " + directory + " " + outbits );
+	//exec("python3 " + path_dataset_folder_export_all_h5_to_klb_pyklb); //,directory,outbits);	
+	exec("python3", path_dataset_folder_export_all_h5_to_klb_pyklb, directory, outbits);
+	print("DONE: Convert fused .h5 to .klb (folder in batch).");
+}
+macro "5. Create .klb BigDataViewer dataset.xml file..." {
+	run("Open KLB");
+	print("DONE: Create .klb BigDataViewer dataset.xml file.");
+}
+macro "5. Convert t0XXXX .klb files to anaglyphs or MIPs (folder in batch)..." {
+	main_klb_to_mip("");
+	setBatchMode("exit and display");
+	print("DONE: Convert t0XXXX .klb files to anaglyphs or MIPs (folder in batch).");
+}
+macro "5. Convert LSFM .tif or t0XXXX .klb files to partially collapsed Z-stacks..." {
 	main_stacks_to_partial_collapse("","","");
 	setBatchMode("exit and display");
 	print("DONE: Convert LSFM .tif or t0XXXX .klb files to partially collapsed Z-stacks.");
 }
-macro "Extract defined slice(s) from LSFM .tif or t0XXXX .klb files in time series..." {
+macro "6. Extract defined slice(s) from LSFM .tif or t0XXXX .klb files in time series..." {
 	main_extract_defined_slices ("");
 	setBatchMode("exit and display");
 	print("DONE: Extract defined slice(s) from LSFM .tif or t0XXXX .klb files in time series.");
 }
-macro "Montage multichannel single slice image to channel/merge presentation (selected image ONLY)..." {
-	main_multichannel_to_channels_and_merge();
+macro "7. Process t0XXXX MIPs (folder in batch) to AVIs..." {
+	main_mip_to_avi();	
+	setBatchMode("exit and display");
+	print("DONE: Process t0XXXX MIPs (folder in batch) to AVIs.");
 }
-macro "Bright blob/precipitate remover (selected image ONLY)..." {
+macro "  " {
+	// menu spacer
+}
+macro "Macro: Bright blob/precipitate remover (selected image ONLY)..." {
 	if ( fixed_precipitate_removal || fixed_blob_removal ) {
 	bright_blob_remover_this_image(fixed_precipitate_removal,fixed_blob_removal);
 	}
 }
-macro "Enhance local contrast (stack, selected image ONLY)..." {
+macro "Macro: Enhance local contrast (stack, selected image ONLY)..." {
 	blocksize = 127;
 	histogram_bins = 256;
 	maximum_slope = 2.0;
@@ -3756,8 +3971,10 @@ macro "Enhance local contrast (stack, selected image ONLY)..." {
 	}
 	print("DONE: Enhance local contrast (stack, selected image ONLY).");
 }
-
-macro "Montage/Tiles to stack (selected image ONLY)..." {
+macro "Macro: Multichannel single slice image to montage (selected image ONLY)..." {
+	main_multichannel_to_channels_and_merge();
+}
+macro "Macro: Montage/tiles to stack (selected image ONLY)..." {
 	getDimensions(dim_width, dim_height, dim_channels, dim_slices, dim_frames);
 	master_title = getTitle();
 	rand_num = d2s( floor(random() * 1000000 ), 0 );
@@ -3815,4 +4032,11 @@ macro "Montage/Tiles to stack (selected image ONLY)..." {
 		//selectWindow(master_title);
 		//close();
 	}
+}
+macro "Macro: Set Display Range..." {
+	// Sets the display range of the active image.
+	getMinAndMax(min, max);
+	min = getNumber("Min:", min);
+	max = getNumber("Max:", max);
+	setMinAndMax(min, max);
 }
