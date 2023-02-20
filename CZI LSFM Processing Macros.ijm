@@ -100,7 +100,7 @@ function LS_PSF_generator ( NA_objective, NA_lightsheet, RI_immersion, RI_sample
 	
 	//estimate the depth of the PSF in pixels, smallest to get the job done
 	Z_dim = round( 3 * sqrt(beam_width_z_squared) / res_Z );
-	print( "  NAobj = " + d2s(NA_objective,4) + ", resZ = " + d2s(res_Z,4) + ", RIimm = " + RI_immersion );
+	//print( "  NAobj = " + d2s(NA_objective,4) + ", resZ = " + d2s(res_Z,4) + ", RIimm = " + RI_immersion );
 	//print ( "Zdim: " + d2s(Z_dim,4) + "\n" );
 	Z_dim = return_odd_pixel_dimension( Z_dim );
 	if ( isNaN(Z_dim) ) {
