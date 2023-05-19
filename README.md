@@ -1,7 +1,7 @@
 # LSFMProcessing
-A collection of methods for deconvolving, filtering, and rendering LSFM images. This collection is designed to take Zeiss ZEN .czi input files, though it could be generalized to accept any [proprietary] input format that BioFormats allows.
+A collection of methods for deconvolving, filtering, and rendering LSFM images. This collection is currently designed to take Zeiss ZEN .czi or Lavision UM2 .ome.tiff input files, though it could be generalized to accept any [proprietary] input format that BioFormats allows.
 <br><br>
-## Main Fiji Methods (CZI LSFM Processing Macros.ijm)
+## Main Fiji Methods (LSFM Processing Macros.ijm)
 ### Installation / Requirements:
 * Fiji, using ImageJ 1.53f or greater
 * BigStitcher, Bio-Formats, SiMView packages installed (checked) in Fiji Update
@@ -13,7 +13,7 @@ A collection of methods for deconvolving, filtering, and rendering LSFM images. 
 * pyklb and h5py installed on system for h5/klb functions
   - on Ubuntu, can use `sudo pip3 install pyklb h5py` at console to install
 
-Use `Plugins->Macros->Install` to add `CZI LSFM Processing Macros.ijm` to the macrons menu in Fiji.<br>
+Use `Plugins->Macros->Install` to add `LSFM Processing Macros.ijm` to the macrons menu in Fiji.<br>
 Then, use `Plugins->Macros->0. Change LSFM Processing Settings` to adjust user settings, including filter parameters and deconvolution block size.<br>
 <br><br>
 ## BigStitcher dataset copy view transformations (dataset_folder_copy_view_transformations.pl)
