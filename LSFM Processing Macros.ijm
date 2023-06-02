@@ -1,5 +1,5 @@
 // Zeiss Light Sheet Processing Macro Scripts
-// 2019-2020 Martin H. Dominguez
+// 2019-2023 Martin H. Dominguez
 // Gladstone Institutes
 
 // requires: 
@@ -8,6 +8,9 @@
 //     PSF generator 18.12.2017 (http://bigwww.epfl.ch/algorithms/psfgenerator/)
 //       - download Fiji plugin and place PSF_Generator.jar in plugins folder
 //     Parallel Spectral Deconvolution 1.12 (https://sites.google.com/site/piotrwendykier/software/deconvolution/parallelspectraldeconvolution)
+//       - download plugin binary zip file and copy all *.jar files to plugins folder
+//       - delete file jars/jtransforms-2.4.jar before using deconvolution
+//     Parallel Iterative Deconvolution 1.12 (if using iterative deconvolution, https://sites.google.com/site/piotrwendykier/software/deconvolution/paralleliterativedeconvolution)
 //       - download plugin binary zip file and copy all *.jar files to plugins folder
 //       - delete file jars/jtransforms-2.4.jar before using deconvolution
 //     pyklb and h5py installed separately for h5/klb functions
@@ -26,6 +29,10 @@ function show_instructions () {
     Dialog.addMessage("       - download plugin binary zip file (https://sites.google.com/site/piotrwendykier/software/deconvolution/parallelspectraldeconvolution)",12,"Black");
     Dialog.addMessage("       - unzip and copy all *.jar files to Fiji plugins folder",12,"Black");
     Dialog.addMessage("       - delete file jtransforms-2.4.jar in Fiji jars folder before using deconvolution",12,"Black");
+    Dialog.addMessage("   Parallel Iterative Deconvolution 1.12 (if using iterative deconvolution)",14,"Black");
+    Dialog.addMessage("       - download plugin binary zip file (https://sites.google.com/site/piotrwendykier/software/deconvolution/paralleliterativedeconvolution)",12,"Black");
+    Dialog.addMessage("       - unzip and copy all *.jar files to Fiji plugins folder",12,"Black");
+    Dialog.addMessage("       - delete file jtransforms-2.4.jar in Fiji jars folder before using deconvolution",12,"Black");
     Dialog.addMessage("   pyklb and h5py installed on system, for h5/klb functions",14,"Black");
     Dialog.addMessage("       - on Ubuntu, can use \"sudo pip3 install pyklb h5py\" at console to install",12,"Black");
 	Dialog.show();
@@ -40,6 +47,7 @@ var fixed_precipitate_removal = true;
 var convert_to_8_bit = true;
 var generate_mips_when_filtering = true;
 var deconvolution_regression_parameter = 50;
+var deconvolution_iterations = 0;
 var deconvolution_subtract_camera_noise = true;
 var detection_NA_penalty = 10;
 var path_dataset_folder_export_all_h5_to_klb_pyklb = "dataset_folder_export_all_h5_to_klb_pyklb.py";
@@ -855,7 +863,11 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 						if ( num_blocks < 2 ) { //case num_blocks == 1 -- shouldn't ever get here
 							//32-bit output (with single precision calculation)
 							run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.gtik.FloatReflexiveGeneralizedTikhonov3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.SpectralEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar frgt = new FloatReflexiveGeneralizedTikhonov3D(WindowManager.getImage(" + d2s(img_id, 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), SpectralEnums.FloatStencil3DType.LAPLACIAN.stencil, SpectralEnums.ResizingType.NONE, Enums.OutputType.FLOAT, false, " + d2s(lambda,8) + ", 0).deconvolve().show();\n";
+							if ( deconvolution_iterations > 1 ) {
+								run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLFloatIterativeDeconvolver3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLOptions);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.IterativeEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar options = new WPLOptions(); options.setNormalize(true);\nvar frgt = new WPLFloatIterativeDeconvolver3D(WindowManager.getImage(" + d2s(img_id, 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), IterativeEnums.BoundaryType.REFLEXIVE, IterativeEnums.ResizingType.AUTO, Enums.OutputType.FLOAT, " + d2s(deconvolution_iterations,0) +", false, options ).deconvolve().show();\n";
+							}
 							//print (run_script);
+							//call("edu.emory.mathcs.restoretools.spectral.ParallelSpectralDeconvolution3D.deconvolve", pathToBlurredImage, pathToPsf, pathToDeblurredImage, method, stencil, resizing, output, precision, threshold, regParam, nOfThreads, showPadded);
 							eval( "js", run_script );  //throw away result
 						} else {
 							img_ids = newArray(num_blocks); //create array with all image IDs of blocks
@@ -883,6 +895,9 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 
 							//deconvolve first child
 							run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.gtik.FloatReflexiveGeneralizedTikhonov3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.SpectralEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar frgt = new FloatReflexiveGeneralizedTikhonov3D(WindowManager.getImage(" + d2s(img_ids[1], 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), SpectralEnums.FloatStencil3DType.LAPLACIAN.stencil, SpectralEnums.ResizingType.NONE, Enums.OutputType.FLOAT, false, " + d2s(lambda,8) + ", 0).deconvolve().show();\n"; //print (run_script);								
+							if ( deconvolution_iterations > 1 ) {
+								run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLFloatIterativeDeconvolver3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLOptions);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.IterativeEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar options = new WPLOptions(); options.setNormalize(true);\nvar frgt = new WPLFloatIterativeDeconvolver3D(WindowManager.getImage(" + d2s(img_ids[1], 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), IterativeEnums.BoundaryType.REFLEXIVE, IterativeEnums.ResizingType.AUTO, Enums.OutputType.FLOAT, " + d2s(deconvolution_iterations,0) +", false, options ).deconvolve().show();\n";
+							}
 							eval( "js", run_script );  //throw away result of eval
 							run("Slice Remover", "first=" + d2s(block_depth+1,0) + " last=" + d2s(block_depth+psf_depth[b],0) + " increment=1");//delete padding
 							rand_num = d2s(floor(random() * 1000000 ),0);
@@ -906,6 +921,9 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 									
 								//deconvolve intermediate child
 								run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.gtik.FloatReflexiveGeneralizedTikhonov3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.SpectralEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar frgt = new FloatReflexiveGeneralizedTikhonov3D(WindowManager.getImage(" + d2s(img_ids[ii], 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), SpectralEnums.FloatStencil3DType.LAPLACIAN.stencil, SpectralEnums.ResizingType.NONE, Enums.OutputType.FLOAT, false, " + d2s(lambda,8) + ", 0).deconvolve().show();\n"; //print (run_script);								
+								if ( deconvolution_iterations > 1 ) {
+									run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLFloatIterativeDeconvolver3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLOptions);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.IterativeEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar options = new WPLOptions(); options.setNormalize(true);\nvar frgt = new WPLFloatIterativeDeconvolver3D(WindowManager.getImage(" + d2s(img_ids[ii], 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), IterativeEnums.BoundaryType.REFLEXIVE, IterativeEnums.ResizingType.AUTO, Enums.OutputType.FLOAT, " + d2s(deconvolution_iterations,0) +", false, options ).deconvolve().show();\n";
+								}
 								eval( "js", run_script );  //throw away result of eval
 								run("Slice Remover", "first=1 last=" + d2s(psf_depth[b],0) + " increment=1");//delete padding
 								run("Slice Remover", "first=" + d2s(block_depth+1,0) + " last=" + d2s(block_depth+psf_depth[b],0) + " increment=1");//delete padding
@@ -926,6 +944,9 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 								
 							//deconvolve parent -- note this script DOES NOT deconvolve in place
 							run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.gtik.FloatReflexiveGeneralizedTikhonov3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.SpectralEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar frgt = new FloatReflexiveGeneralizedTikhonov3D(WindowManager.getImage(" + d2s(img_ids[0], 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), SpectralEnums.FloatStencil3DType.LAPLACIAN.stencil, SpectralEnums.ResizingType.NONE, Enums.OutputType.FLOAT, false, " + d2s(lambda,8) + ", 0).deconvolve().show();\n"; //print (run_script);								
+							if ( deconvolution_iterations > 1 ) {
+								run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLFloatIterativeDeconvolver3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLOptions);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.IterativeEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar options = new WPLOptions(); options.setNormalize(true);\nvar frgt = new WPLFloatIterativeDeconvolver3D(WindowManager.getImage(" + d2s(img_ids[0], 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), IterativeEnums.BoundaryType.REFLEXIVE, IterativeEnums.ResizingType.AUTO, Enums.OutputType.FLOAT, " + d2s(deconvolution_iterations,0) +", false, options ).deconvolve().show();\n";
+							}
 							eval( "js", run_script );  //throw away result of eval
 							run("Slice Remover", "first=1 last=" + d2s(psf_depth[b],0) + " increment=1");//delete padding
 							rand_num = d2s(floor(random() * 1000000 ),0);
@@ -954,6 +975,9 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 					} else { //normal flow through this else statement -- images not greater than 480 Z-depth
 						//32-bit output (with single precision calculation)
 						run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.gtik.FloatReflexiveGeneralizedTikhonov3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.SpectralEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar frgt = new FloatReflexiveGeneralizedTikhonov3D(WindowManager.getImage(" + d2s(img_id, 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), SpectralEnums.FloatStencil3DType.LAPLACIAN.stencil, SpectralEnums.ResizingType.NONE, Enums.OutputType.FLOAT, false, " + d2s(lambda,8) + ", 0).deconvolve().show();\n";
+						if ( deconvolution_iterations > 1 ) {
+							run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLFloatIterativeDeconvolver3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLOptions);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.IterativeEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar options = new WPLOptions(); options.setNormalize(true);\nvar frgt = new WPLFloatIterativeDeconvolver3D(WindowManager.getImage(" + d2s(img_id, 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), IterativeEnums.BoundaryType.REFLEXIVE, IterativeEnums.ResizingType.AUTO, Enums.OutputType.FLOAT, " + d2s(deconvolution_iterations,0) +", false, options ).deconvolve().show();\n";
+						}
 						//print (run_script);
 						eval( "js", run_script );  //throw away result
 					}
@@ -1464,9 +1488,12 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 					//run deconvolution
 					//32-bit output (with single precision calculation)
 					run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.gtik.FloatReflexiveGeneralizedTikhonov3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.SpectralEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar frgt = new FloatReflexiveGeneralizedTikhonov3D(WindowManager.getImage(" + d2s(img_id, 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), SpectralEnums.FloatStencil3DType.LAPLACIAN.stencil, SpectralEnums.ResizingType.NONE, Enums.OutputType.FLOAT, false, " + d2s(lambda,8) + ", 0).deconvolve().show();\n";
+					if ( deconvolution_iterations > 1 ) {
+						run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLFloatIterativeDeconvolver3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLOptions);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.IterativeEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar options = new WPLOptions(); options.setNormalize(true);\nvar frgt = new WPLFloatIterativeDeconvolver3D(WindowManager.getImage(" + d2s(img_id, 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), IterativeEnums.BoundaryType.REFLEXIVE, IterativeEnums.ResizingType.AUTO, Enums.OutputType.FLOAT, " + d2s(deconvolution_iterations,0) +", false, options ).deconvolve().show();\n";
+					}
 					//print (run_script);
 					eval( "js", run_script );  //throw away result
-					
+
 					if ( do_twice ) {
 						next_img_id = getImageID(); //get new image ID
 						
@@ -1494,6 +1521,9 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 	
 						//run deconvolution
 						run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.gtik.FloatReflexiveGeneralizedTikhonov3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.SpectralEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar frgt = new FloatReflexiveGeneralizedTikhonov3D(WindowManager.getImage(" + d2s(img_id, 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), SpectralEnums.FloatStencil3DType.LAPLACIAN.stencil, SpectralEnums.ResizingType.NONE, Enums.OutputType.FLOAT, false, " + d2s(lambda,8) + ", 0).deconvolve().show();\n";
+						if ( deconvolution_iterations > 1 ) {
+							run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLFloatIterativeDeconvolver3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLOptions);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.IterativeEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar options = new WPLOptions(); options.setNormalize(true);\nvar frgt = new WPLFloatIterativeDeconvolver3D(WindowManager.getImage(" + d2s(img_id, 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), IterativeEnums.BoundaryType.REFLEXIVE, IterativeEnums.ResizingType.AUTO, Enums.OutputType.FLOAT, " + d2s(deconvolution_iterations,0) +", false, options ).deconvolve().show();\n";
+						}
 						//print (run_script);
 						eval( "js", run_script );  //throw away result
 						next_img_id = getImageID(); //get new image ID
@@ -3780,7 +3810,8 @@ macro "0. Change LSFM processing settings..." {
 	Dialog.addMessage("LSFM .czi deconvolution settings...",16,"Black");
 	Dialog.addNumber("Max depth (slices) for large stack blockwise deconvolution:", max_slice_depth);
 	//Dialog.addMessage("  heap allocation in MB should be 200 times max slice depth");
-	Dialog.addNumber("Deconvolution regression coefficient multiplier:", deconvolution_regression_parameter);
+	Dialog.addNumber("# iterations (0 non-iterative OR >1 iterative):", deconvolution_iterations);
+	Dialog.addNumber("Regression coefficient multiplier (non-iterative only):", deconvolution_regression_parameter);
 	Dialog.addCheckbox("Attempt to subtract camera noise from stack", deconvolution_subtract_camera_noise );
 	Dialog.addNumber("Detection NA penalty (% of NA, improves aberration handling):", detection_NA_penalty );
 	Dialog.addMessage("\n\n");
@@ -3796,6 +3827,7 @@ macro "0. Change LSFM processing settings..." {
 	Dialog.show();
 
 	max_slice_depth = Dialog.getNumber();
+	deconvolution_iterations = floor( Dialog.getNumber() );
 	deconvolution_regression_parameter = Dialog.getNumber();
 	deconvolution_subtract_camera_noise = Dialog.getCheckbox();
 	detection_NA_penalty = Dialog.getNumber();
