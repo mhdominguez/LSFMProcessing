@@ -14,7 +14,7 @@
 //       - download plugin binary zip file and copy all *.jar files to plugins folder
 //       - delete file jars/jtransforms-2.4.jar before using deconvolution
 //     pyklb and h5py installed separately for h5/klb functions
-//       - on Ubuntu, can use "sudo pip3 install pyklb h5py" at console to install
+//       - on Ubuntu, can use "sudo pip3 install git+https://github.com/bhoeckendorf/pyklb.git@skbuild h5py" at console to install
 
 function show_instructions () {
 	Dialog.create("LSFM processing install info/instructions...");
@@ -34,7 +34,7 @@ function show_instructions () {
     Dialog.addMessage("       - unzip and copy all *.jar files to Fiji plugins folder",12,"Black");
     Dialog.addMessage("       - delete file jtransforms-2.4.jar in Fiji jars folder before using deconvolution",12,"Black");
     Dialog.addMessage("   pyklb and h5py installed on system, for h5/klb functions",14,"Black");
-    Dialog.addMessage("       - on Ubuntu, can use \"sudo pip3 install pyklb h5py\" at console to install",12,"Black");
+    Dialog.addMessage("       - on Ubuntu, can use \"sudo pip3 install git+https://github.com/bhoeckendorf/pyklb.git@skbuild h5py\" at console to install",12,"Black");
 	Dialog.show();
 }
 
