@@ -49,10 +49,45 @@ var generate_mips_when_filtering = true;
 var deconvolution_regression_parameter = 50;
 var deconvolution_iterations = 0;
 var deconvolution_subtract_camera_noise = true;
+var deconvolve_yes = true;
 var detection_NA_penalty = 10;
 var path_dataset_folder_export_all_h5_to_klb_pyklb = "dataset_folder_export_all_h5_to_klb_pyklb.py";
 
 var default_tissue_refractive_index = 1.4;
+var default_immersion_refractive_index = 1.333;
+
+function removeLeadingWhitespace(str) {
+    while (startsWith(str, " ")) {
+        str = substring(str, 1);  // Remove the first character
+    }
+    return str;
+}
+
+function listFilesRecursive(directory) {
+	list = getFileList(directory);
+	fileList = newArray(list.length);
+
+	for (i = 0; i < list.length; i++) {
+		filePath = directory + file_sep + list[i];
+		
+		if (File.isDirectory(filePath)) {
+			// Recursively call the function for subdirectories
+			subdirectoryFiles = listFilesRecursive(filePath);
+			
+			// Concatenate the subdirectory files with the current directory files
+			fileList = concat(fileList, subdirectoryFiles);
+		} else {
+			// Add the file path to the array
+			fileList[i] = filePath;
+		}
+	}
+	
+	// Remove null entries from the array (if any)
+	fileList = Array.trim(fileList);
+	
+	// Return the array of file names
+	return fileList;
+}
 
 
 function LS_PSF_generator ( NA_objective, NA_lightsheet, RI_immersion, RI_sample, lambda_lightsheet, lambda_detection, res_XY, res_Z, Z_radius_lightsheet, WD_return, CS_return ) {
@@ -109,14 +144,14 @@ function LS_PSF_generator ( NA_objective, NA_lightsheet, RI_immersion, RI_sample
 	//estimate the depth of the PSF in pixels, smallest to get the job done
 	Z_dim = round( 3 * sqrt(beam_width_z_squared) / res_Z );
 	//print( "  NAobj = " + d2s(NA_objective,4) + ", resZ = " + d2s(res_Z,4) + ", RIimm = " + RI_immersion );
-	//print ( "Zdim: " + d2s(Z_dim,4) + "\n" );
+	//print ( "Zdim: " + d2s(Z_dim,4) + " based on " + d2s(beam_width_z_squared,6) + "\n" );
 	Z_dim = return_odd_pixel_dimension( Z_dim );
 	if ( isNaN(Z_dim) ) {
 		Z_dim = 31;
 	}
 	
 	//next estimate smallest XY size possible to get the job done
-	XY_dim = return_odd_pixel_dimension( 9000 / (NA_objective * res_XY * RI_immersion) ); //30 = k * / 0.9(NA) * 250(XY) * 1(RIi)
+	XY_dim = return_odd_pixel_dimension( 6500 / (NA_objective * res_XY * RI_immersion) ); //30 = k * / 0.9(NA) * 250(XY) * 1(RIi)
 	if ( isNaN(XY_dim) ) {
 		XY_dim = 31 ;
 	}
@@ -395,7 +430,7 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 	setBatchMode(true);
 
 	for (i=0; i<processList.length; i++) {
-		name_ext = split(processList[i],"///");
+		name_ext = split(processList[i],"(///)");
 		file = directory + file_sep + name_ext[1];
 		print( "Preparing " + directory + file_sep + name_ext[1] + " for deconvolution..." );
 		
@@ -561,9 +596,7 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 				Ext.getMetadataValue("Information|Image|Channel|DetectionWavelength|SinglePeak #" + d2s((a+1),0), WLdetections[a]);
 				
 				print( "  ..examining " + name_ext[0] + " ...channel " + d2s(a,0) + " parameters: NAill " + d2s(NAlightsheets[a],6) + ", NAdet " + d2s(NAdetections[a],6) + ", WLill " + d2s(WLlightsheets[a],2) + ", WLdet " + d2s(WLdetections[a],2) );
-			}			
-				
-
+			}
 		}
 
 		for (t=0; t<max_time; t++ ) {		
@@ -592,7 +625,7 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 			 		* <Pixels ID="Pixels:25492249-EF27-4C5C-9DC5-D4343416BCD4" DimensionOrder="XYZTC" PixelType="uint16" BigEndian="false" SizeX="1772" SizeY="1742" SizeZ="1117" SizeT="1" SizeC="1" PhysicalSizeX="3.559694" PhysicalSizeY="3.559693" PhysicalSizeZ="1.700000">
 				 	*/
 					infoString = split(infoData, "\n");
-					beam_waist = 0;
+					beam_waist = "0";
 					for ( l=0; l<infoString.length; l++ ) {
 						if (indexOf(infoString[l], "fname=\"UltraII LRI\"") >= 0) {
 							RIlightsheet = return_parse_xml_line_for_value(infoString[l]);
@@ -614,7 +647,7 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 					// beam_waist = RI_immersion * lambda_lightsheet / ( NA_lightsheet * PI );
 					//NA = (1.55) * .488 / ( PI * 3.889772 )
 					//	( PI * 3.889772 ) = 12.22						
-					NAlightsheets[0] = d2s(RIlightsheet * WLlightsheets[0]/1000 / ( PI * beam_waist),10);
+					NAlightsheets[0] = d2s( (parseFloat(RIlightsheet) * parseFloat(WLlightsheets[0])/1000) / ( PI * parseFloat(beam_waist)),10);
 					
 				}
 				
@@ -868,7 +901,11 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 							}
 							//print (run_script);
 							//call("edu.emory.mathcs.restoretools.spectral.ParallelSpectralDeconvolution3D.deconvolve", pathToBlurredImage, pathToPsf, pathToDeblurredImage, method, stencil, resizing, output, precision, threshold, regParam, nOfThreads, showPadded);
-							eval( "js", run_script );  //throw away result
+							if ( deconvolve_yes ) {
+								eval( "js", run_script );  //throw away result
+							} else {
+								run("Duplicate...", "duplicate");
+							}
 						} else {
 							img_ids = newArray(num_blocks); //create array with all image IDs of blocks
 							Array.fill(img_ids,NaN);
@@ -898,7 +935,11 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 							if ( deconvolution_iterations > 1 ) {
 								run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLFloatIterativeDeconvolver3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLOptions);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.IterativeEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar options = new WPLOptions(); options.setNormalize(true);\nvar frgt = new WPLFloatIterativeDeconvolver3D(WindowManager.getImage(" + d2s(img_ids[1], 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), IterativeEnums.BoundaryType.REFLEXIVE, IterativeEnums.ResizingType.AUTO, Enums.OutputType.FLOAT, " + d2s(deconvolution_iterations,0) +", false, options ).deconvolve().show();\n";
 							}
-							eval( "js", run_script );  //throw away result of eval
+							if ( deconvolve_yes ) {
+								eval( "js", run_script );  //throw away result
+							} else {
+								run("Duplicate...", "duplicate");
+							}
 							run("Slice Remover", "first=" + d2s(block_depth+1,0) + " last=" + d2s(block_depth+psf_depth[b],0) + " increment=1");//delete padding
 							rand_num = d2s(floor(random() * 1000000 ),0);
 							rename("block1-" + rand_num);
@@ -924,7 +965,11 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 								if ( deconvolution_iterations > 1 ) {
 									run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLFloatIterativeDeconvolver3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLOptions);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.IterativeEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar options = new WPLOptions(); options.setNormalize(true);\nvar frgt = new WPLFloatIterativeDeconvolver3D(WindowManager.getImage(" + d2s(img_ids[ii], 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), IterativeEnums.BoundaryType.REFLEXIVE, IterativeEnums.ResizingType.AUTO, Enums.OutputType.FLOAT, " + d2s(deconvolution_iterations,0) +", false, options ).deconvolve().show();\n";
 								}
-								eval( "js", run_script );  //throw away result of eval
+								if ( deconvolve_yes ) {
+									eval( "js", run_script );  //throw away result
+								} else {
+									run("Duplicate...", "duplicate");
+								}
 								run("Slice Remover", "first=1 last=" + d2s(psf_depth[b],0) + " increment=1");//delete padding
 								run("Slice Remover", "first=" + d2s(block_depth+1,0) + " last=" + d2s(block_depth+psf_depth[b],0) + " increment=1");//delete padding
 								rand_num = d2s(floor(random() * 1000000 ),0);
@@ -947,7 +992,11 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 							if ( deconvolution_iterations > 1 ) {
 								run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLFloatIterativeDeconvolver3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLOptions);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.IterativeEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar options = new WPLOptions(); options.setNormalize(true);\nvar frgt = new WPLFloatIterativeDeconvolver3D(WindowManager.getImage(" + d2s(img_ids[0], 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), IterativeEnums.BoundaryType.REFLEXIVE, IterativeEnums.ResizingType.AUTO, Enums.OutputType.FLOAT, " + d2s(deconvolution_iterations,0) +", false, options ).deconvolve().show();\n";
 							}
-							eval( "js", run_script );  //throw away result of eval
+							if ( deconvolve_yes ) {
+								eval( "js", run_script );  //throw away result
+							} else {
+								run("Duplicate...", "duplicate");
+							}
 							run("Slice Remover", "first=1 last=" + d2s(psf_depth[b],0) + " increment=1");//delete padding
 							rand_num = d2s(floor(random() * 1000000 ),0);
 							rename("block0-" + rand_num);
@@ -979,7 +1028,11 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 							run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLFloatIterativeDeconvolver3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLOptions);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.IterativeEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar options = new WPLOptions(); options.setNormalize(true);\nvar frgt = new WPLFloatIterativeDeconvolver3D(WindowManager.getImage(" + d2s(img_id, 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), IterativeEnums.BoundaryType.REFLEXIVE, IterativeEnums.ResizingType.AUTO, Enums.OutputType.FLOAT, " + d2s(deconvolution_iterations,0) +", false, options ).deconvolve().show();\n";
 						}
 						//print (run_script);
-						eval( "js", run_script );  //throw away result
+						if ( deconvolve_yes ) {
+							eval( "js", run_script );  //throw away result
+						} else {
+							run("Duplicate...", "duplicate");
+						}
 					}
 					//run("Enhance Contrast...", "saturated=0 normalize process_all use");
 					setMinAndMax(0, 65535); //clip the upper bounds of signal (lower bounds already clipped for nonnegativity)
@@ -1029,6 +1082,45 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 	}
 }
 
+function getValueByKeyJson(key, jsonText) {
+	index = indexOf(jsonText, '"' + key + '":');
+	if (index != -1) {
+		startIndex = index + lengthOf(key) + 3;
+		endIndex = -1;
+		str = replace(String.trim(substring(jsonText, startIndex)), "\n", "");
+		startIndex = 0;
+		if (startsWith(str, '"')) {
+			startIndex = 1;
+			endIndex = indexOf(str, '"', startIndex);
+		} else if (startsWith(str, "'")) {
+			startIndex = 1;
+			endIndex = indexOf(str, "'", startIndex);
+		} else if (startsWith(str, "{")) {
+			startIndex = 1;
+			endIndex = indexOf(str, '}', startIndex);
+		} else if (startsWith(str, "[")) {
+			startIndex = 1;
+			endIndex = indexOf(str, ']', startIndex);
+		} else {
+			endIndex = indexOf(str, ",", startIndex);
+			if (endIndex == -1) {
+				endIndex = indexOf(str, "}", startIndex);
+			}
+		}
+
+		/*if (startsWith(str, '"') && endsWith(str, '"')) {
+ 			str = substring(str, 1, lengthOf(str) - 1);
+		}*/
+		//return str;
+		if ( endIndex < 0 ) {
+			return replace(str, " ", "");
+		} else {
+			return replace(substring(str, startIndex, endIndex), " ", "");
+		}
+	}
+	return "";
+}
+
 function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {	
 	
 	if ( directory == "" || !File.exists(directory) ) {
@@ -1044,64 +1136,152 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 	//Count the maximum number of positions and slices in dataset
 	run("Bio-Formats Macro Extensions");
 
+	//print ( "directory: " + directory );
     add_this_file = false;
 	processList = newArray(0);
 	unique_PSF_filenames = newArray(0);
 	unique_PSF_parameters = newArray(0);
 	
+	//determine if Z.1 or MuVi SPIM
+	type = "";
+	if (File.isDirectory(directory + "raw") && File.exists(directory + "bdv.h5")) {
+		type = "json/h5";
+	} 
 	for (i=0; i<fileList.length; i++) {
-		if (endsWith(fileList[i], ".czi")) {
-			
-			//now, remove .czi from end of filename
-			/*name_ext = split(fileList[i],".");
-			filepaddedname = "";
-			for (n=0; n<name_ext.length-1; n++) {
-				filepaddedname += name_ext[n];
-			}*/
-			filepaddedname = substring(fileList[i], 0, fileList[i].length-4);
-			//print( fileList[i] + " -> " + filepaddedname );
-			
-			//filepaddedname = name_ext[0];
-			//print( "File " + d2s(i,0) + " ..." + filepaddedname + " " + fileList[i] );
-			//need to check for presence of \((\d+)\) at end of filename, and if not present, add "(00000)"
+		if (endsWith(fileList[i], ".czi")) { // Zeiss Z.1 CZI format
+			type = ".czi";
+			break;
+		}
+	}
+	//print ("type = " + type );
+	if ( type == ".czi" ) {
+		for (i=0; i<fileList.length; i++) {
+			if (endsWith(fileList[i], ".czi")) {
+				
+				//now, remove .czi from end of filename
+				filepaddedname = substring(fileList[i], 0, fileList[i].length-4);
+				//print( fileList[i] + " -> " + filepaddedname );
+				
+				//filepaddedname = name_ext[0];
+				//print( "File " + d2s(i,0) + " ..." + filepaddedname + " " + fileList[i] );
+				//need to check for presence of \((\d+)\) at end of filename, and if not present, add "(00000)"
+	
+				if ( endsWith(filepaddedname,".") ) { //additional trailing periods should be removed
+					while( endsWith(filepaddedname,".") ) {
+						filepaddedname = substring(filepaddedname,0,filepaddedname.length);					
+					}
+				}
+							
+				if ( endsWith(filepaddedname,")") && matches(filepaddedname, ".*\\(\\d+\\)$") ) {
+					//make sure the digits are padded for name sort
+					//print ( "Matches...\n" );
+	                
+	                //this is a file that is a later file in a time sequence, so we don't need to add it
+	                add_this_file = false;
+	                
+					filepaddedname = replace(filepaddedname, "\\(\(\\d\)\\)", "(" + "0000$1" + ")"); //replace single digits with padding
+					filepaddedname = replace(filepaddedname, "\\(\(\\d\\d\)\\)", "(" + "000$1" + ")" ); //replace double digits with paddi
+					filepaddedname = replace(filepaddedname, "\\(\(\\d\\d\\d\)\\)", "(" + "00$1" + ")" ); //replace triple digits with padding
+					filepaddedname = replace(filepaddedname, "\\(\(\\d\\d\\d\\d\)\\)", "(" + "0$1" + ")" ); //replace quadruple digits with padding
+		
+				} else {
+					//add that stuff to end
+					filepaddedname = filepaddedname + "(00000)";
+	                
+	                //this is a principle file, so use it
+	                add_this_file = true;
+				}
+				
+				filepaddedname = replace(filepaddedname, "\(\\D\)\(\\d\)\(\\D\)", "$1" + "0000" + "$2$3" ); //replace single digits with padding
+				filepaddedname = replace(filepaddedname, "\(\\D\)\(\\d\\d\)\(\\D\)", "$1" + "000" + "$2$3" ); //replace double digits with paddi
+				filepaddedname = replace(filepaddedname, "\(\\D\)\(\\d\\d\\d\)\(\\D\)", "$1" + "00" + "$2$3" ); //replace triple digits with padding
+				filepaddedname = replace(filepaddedname, "\(\\D\)\(\\d\\d\\d\\d\)\(\\D\)", "$1" + "0" + "$2$3" ); //replace quadruple digits with padding
+	            
+	            if ( add_this_file ) {
+	                processList = Array.concat( processList, filepaddedname + "///" + fileList[i] ); //new name will consist of padded old name so we can sort correctly by timepoint
+	            } 
+			}
+		}
 
-			if ( endsWith(filepaddedname,".") ) { //additional trailing periods should be removed
-				while( endsWith(filepaddedname,".") ) {
-					filepaddedname = substring(filepaddedname,0,filepaddedname.length);					
+	} else if ( type == "json/h5" ) {
+		//print( "getting :" + directory + "raw" );
+		folderList = getFileList(directory + "raw");
+		fileList = newArray(0);
+		
+		for (i=0; i<folderList.length; i++) {
+			//print( " checking1: " + directory + "raw" + file_sep + folderList[i] );
+			if ( File.isDirectory(directory + "raw" + file_sep + folderList[i]) ) {
+				thisFileList = getFileList(directory + "raw" + file_sep + folderList[i]);
+				
+				for (ii=0; ii<thisFileList.length; ii++) {
+					fileList = Array.concat( fileList, "raw" + file_sep + folderList[i] + thisFileList[ii] );
 				}
 			}
-						
-			if ( endsWith(filepaddedname,")") && matches(filepaddedname, ".*\\(\\d+\\)$") ) {
-				//make sure the digits are padded for name sort
-				//print ( "Matches...\n" );
-                
-                //this is a file that is a later file in a time sequence, so we don't need to add it
-                add_this_file = false;
-                
-				filepaddedname = replace(filepaddedname, "\\(\(\\d\)\\)", "(" + "0000$1" + ")"); //replace single digits with padding
-				filepaddedname = replace(filepaddedname, "\\(\(\\d\\d\)\\)", "(" + "000$1" + ")" ); //replace double digits with paddi
-				filepaddedname = replace(filepaddedname, "\\(\(\\d\\d\\d\)\\)", "(" + "00$1" + ")" ); //replace triple digits with padding
-				filepaddedname = replace(filepaddedname, "\\(\(\\d\\d\\d\\d\)\\)", "(" + "0$1" + ")" ); //replace quadruple digits with padding
-	
-			} else {
-				//add that stuff to end
-				filepaddedname = filepaddedname + "(00000)";
-                
-                //this is a principle file, so use it
-                add_this_file = true;
-			}
-			
-			filepaddedname = replace(filepaddedname, "\(\\D\)\(\\d\)\(\\D\)", "$1" + "0000" + "$2$3" ); //replace single digits with padding
-			filepaddedname = replace(filepaddedname, "\(\\D\)\(\\d\\d\)\(\\D\)", "$1" + "000" + "$2$3" ); //replace double digits with paddi
-			filepaddedname = replace(filepaddedname, "\(\\D\)\(\\d\\d\\d\)\(\\D\)", "$1" + "00" + "$2$3" ); //replace triple digits with padding
-			filepaddedname = replace(filepaddedname, "\(\\D\)\(\\d\\d\\d\\d\)\(\\D\)", "$1" + "0" + "$2$3" ); //replace quadruple digits with padding
-            
-            if ( add_this_file ) {
-                processList = Array.concat( processList, filepaddedname + "///" + fileList[i] ); //new name will consist of padded old name so we can sort correctly by timepoint
-            }
-		  
 		}
-	
+		
+		for (i=0; i<fileList.length; i++) {
+			if (endsWith(fileList[i], ".h5")) {
+
+				//now, remove .h5 from end of filename
+				filepaddedname = substring(fileList[i], 0, fileList[i].length-3);
+				
+				//remove .lux-XXX extension from end of filename
+				dotIndex = lastIndexOf(filepaddedname, ".");
+				if (dotIndex >= 0) {
+					filepaddedname = substring(filepaddedname, 0, dotIndex);
+				}
+
+				view_setups = newArray(0);
+				//confirm json is present
+				//print ( "  check " + directory + filepaddedname + ".json" );
+				
+	            if ( File.exists(directory + filepaddedname + ".json") ) {
+					//open json to extract timepoint and view angles
+					input_json = File.openAsString( directory + filepaddedname + ".json");
+
+					// Extract the desired information
+					cam_left_to_right =  getValueByKeyJson("cam_left_to_right", input_json);
+					time_point =  parseInt( getValueByKeyJson("time_point", input_json) );
+					channel =  parseInt( getValueByKeyJson("channel", input_json) );
+					camera =  getValueByKeyJson("camera", input_json);
+					start_deg =  parseFloat( getValueByKeyJson("start_deg", input_json) );
+					cam_left_to_right_list = split(cam_left_to_right, ",");
+					cam_left_to_right = cam_left_to_right_list[0];
+
+					filepaddedname = "LSFM_T" + IJ.pad(d2s(time_point,0),4) + "_C" + IJ.pad(d2s(channel,0),1);
+					this_angle = round(start_deg);
+					if ( this_angle > 360 ) {
+						this_angle -= 360;
+					} else if ( this_angle < 0 ) {
+						this_angle += 360;
+					}
+					this_view = -1;
+					if ( camera == "left" || camera == "right"  ) {
+						this_view = 0; // left follows far-to-near acquisition, right is opposite -- will use this later to reverse PSF for right camera
+						if ( camera == "right" ) {
+							//this_angle -= 180;
+							this_view = 1;
+						}
+
+						/*if ( this_angle > 360 ) {
+							this_angle -= 360;
+						} else if ( this_angle < 0 ) {
+							this_angle += 360;
+						}
+						*/
+
+						//now, segment viewsetup into AXXX_VX and then create view setup with that identity
+						filepaddedname = filepaddedname + "_A" + IJ.pad(d2s(this_angle,0),3) + "_V" + IJ.pad(d2s(this_view,0),1);
+						//print( "filepaddedname: " + filepaddedname );
+						processList = Array.concat( processList, filepaddedname + "///" + fileList[i] + "///" + d2s(time_point,0) + "///" + d2s(channel,0) + "///" + d2s(this_angle,0) + "///" + d2s(this_view,0) ); //new name will consist of padded old name so we can sort correctly by timepoint
+						//print ("   adding: " + filepaddedname + "///" + fileList[i] );
+					}
+
+
+	            }
+			}
+		}
+
 	}
 	
 	Array.sort(processList); //sort files by their intended name, not true name
@@ -1109,64 +1289,114 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 	
 	//NAlightsheet = 0;
 	//WLlightsheet = 0;
-	RIlightsheet = 0;
+	nPositions = 1;
+	string_angles = newArray(nPositions);
+	Array.fill(string_angles,NaN); 
+	
+	angles = newArray(1);
+	angles[0] = 0;
+	RIlightsheet = default_immersion_refractive_index;
 	max_channels = 0;
     max_time = 0;
 	this_time = 0;
+	Olightsheet = "";
 	//exit();
 	
 	setBatchMode(true);
+	input_json = "";
+	/*	for (i=0; i<processList.length; i++) {
+			print ( "process list: " + processList[i] );
+		}*/
 
 	for (i=0; i<processList.length; i++) {
 	//for (i=0; i<1; i++) {
-		name_ext = split(processList[i],"///");
-		file = directory + file_sep + name_ext[1];
 		
-		Ext.setId(file);
-		Ext.getSeriesCount(nPositions);
+		name_ext = split(processList[i],"(///)");
+		//file = directory + name_ext[1];
+		file = directory + name_ext[1];
 		
-		//get refractive index
-		//although this will retrieve metadata only from active series, refractive index is not different for each channel or view but instead is the same for everything
-		RIlightsheet = 0;
-		Ext.getMetadataValue("Information|Image|RefractiveIndex #1", RIlightsheet);
-		if ( RIlightsheet == 0 ) {
-			Ext.getMetadataValue("Information|Image|RefractiveIndex", RIlightsheet);
-		}
-		//print ( "Metadata: \n" + metadata_value  + "\n" ); exit();
+		if ( type == ".czi" ) {
+			
+			Ext.setId(file);
+			Ext.getSeriesCount(nPositions);
 		
-		//get objective name
-		Olightsheet = "";
-		Ext.getMetadataValue("Experiment|AcquisitionBlock|AcquisitionModeSetup|Objective #1", Olightsheet);
-		if ( Olightsheet == "" || Olightsheet == 0 ) {
-			Ext.getMetadataValue("Experiment|AcquisitionBlock|AcquisitionModeSetup|Objective", Olightsheet);
-		}
-		
-		//get view angles, again metadata permeates all series and these values can be extracted with any series open
-		string_angles = newArray(nPositions);
-		angles = newArray(nPositions);
-		Array.fill(string_angles,NaN); // default angle is NaN
-		Array.fill(angles,NaN); // default angle is NaN
-		
-		//grab initial angles from file
-		if ( nPositions < 1) {
-			print ( "Fewer than one view/position present in file " + directory + file_sep + name_ext[1] + "!\n" );
-			continue;
-		} else {
-			//fill angles array
-			for(a=0; a<nPositions; a++) {
-				Ext.getMetadataValue("Information|Image|V|View|Offset #" + d2s((a+1),0), string_angles[a]);
+			//get refractive index
+			//although this will retrieve metadata only from active series, refractive index is not different for each channel or view but instead is the same for everything
+			RIlightsheet = 0;
+			Ext.getMetadataValue("Information|Image|RefractiveIndex #1", RIlightsheet);
+			if ( RIlightsheet == 0 ) {
+				Ext.getMetadataValue("Information|Image|RefractiveIndex", RIlightsheet);
+			}
+			//print ( "Metadata: \n" + metadata_value  + "\n" ); exit();
+
+			//get view angles, again metadata permeates all series and these values can be extracted with any series open
+			string_angles = newArray(nPositions);
+			angles = newArray(nPositions);
+			Array.fill(string_angles,NaN); // default angle is NaN
+			Array.fill(angles,NaN); // default angle is NaN
+			
+			//get objective name
+			Ext.getMetadataValue("Experiment|AcquisitionBlock|AcquisitionModeSetup|Objective #1", Olightsheet);
+			if ( Olightsheet == "" || Olightsheet == 0 ) {
+				Ext.getMetadataValue("Experiment|AcquisitionBlock|AcquisitionModeSetup|Objective", Olightsheet);
+			}
+			//grab initial angles from file
+			if ( nPositions < 1) {
+				print ( "Fewer than one view/position present in file " + directory + name_ext[1] + "!\n" );
+				continue;
+			} else {
+				//fill angles array
+				for(a=0; a<nPositions; a++) {
+					Ext.getMetadataValue("Information|Image|V|View|Offset #" + d2s((a+1),0), string_angles[a]);
+				}
+
+				//fill actual angles array with numbers
+				for(a=0; a<nPositions; a++) {
+					angles[a] = parseFloat( string_angles[a]);
+				}
+			}
+		} else if ( type == "json/h5" ) {
+			//filepaddedname = substring(name_ext[0], 0, name_ext[0].length-4);
+			filepaddedname = name_ext[1];
+			//print( "tried to open: " + name_ext[1] );
+			dotIndex = lastIndexOf(filepaddedname, ".");
+			if (dotIndex >= 0) {
+				filepaddedname = substring(name_ext[1], 0, dotIndex);
+			}
+			dotIndex = lastIndexOf(filepaddedname, ".");
+			if (dotIndex >= 0) {
+				filepaddedname = substring(name_ext[1], 0, dotIndex);
 			}
 			
-			//fill actual angles array with numbers
-			for(a=0; a<nPositions; a++) {
-				angles[a] = parseFloat( string_angles[a]);
+			
+			//print( "tried to open: " + directory + filepaddedname + ".json" );
+			if ( type == "json/h5" && File.exists(directory + filepaddedname + ".json") ) {
+				//open json to extract timepoint and view angles
+				input_json = File.openAsString( directory + filepaddedname + ".json");
 			}
+			
+			//print( input_json); exit(0);
+		
+			// Extract the desired information
+			refractive_index =  parseFloat(getValueByKeyJson("refractive_index", input_json));
+			if ( isNaN(refractive_index) || refractive_index < 1 ) {
+				refractive_index = default_immersion_refractive_index;
+			}
+			angles[0] =  parseInt(name_ext[4]); //round(parseFloat( getValueByKeyJson("start_deg", input_json) ));
+			string_angles[0] = name_ext[4] + "_" + name_ext[5];
+
 		}
 
+		/*
 		//modify angles to try to put front at zero degrees
 		if ( nPositions == 1 ) {
 			//set only available angle to zero degrees
-			angles[0] = 0;
+			if ( type == ".czi" ) {
+				angles[0] = 0;
+			} else if () {
+
+
+			}
 		} else { // 2 or more angles
 		
 			//first, figure out whether we should use angles from -180 to +180, or 0 to 360 -- to do this, if the difference between the largest and smallest angles is greater than 180, use -180 to 180 rather than 0 to 360
@@ -1226,23 +1456,28 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 				}
 			}
 		}
+		*/
 		
 		//get lightsheet data for each channel
-		num_channels = 0;
+		num_channels = 1;
         num_time = 0;
-		max_time = 0;
-		for(a=0; a<nPositions; a++) {	
-			Ext.setSeries(a);
-			Ext.getSizeC(num_channels);
-            Ext.getSizeT(num_time);
-			
-			if ( num_channels > max_channels ) {
-				max_channels = num_channels;
+		max_time = 1;
+
+		if ( type == ".czi" ) {
+			for(a=0; a<nPositions; a++) {
+				Ext.setSeries(a);
+				Ext.getSizeC(num_channels);
+	            Ext.getSizeT(num_time);
+
+				if ( num_channels > max_channels ) {
+					max_channels = num_channels;
+				}
+				if ( num_time > max_time ) {
+					max_time = num_time;
+				}
 			}
-			if ( num_time > max_time ) {
-				max_time = num_time;
-			}			
 		}
+
 		NAlightsheets = newArray(max_channels);
 		NAdetections = newArray(max_channels);
 		WLlightsheets = newArray(max_channels);
@@ -1253,23 +1488,177 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 		Array.fill(WLlightsheets,0); // default WL is 0
 		Array.fill(WLdetections,0); // default WL is 0
 
-		for(a=0; a<max_channels; a++) {
-			Ext.getMetadataValue("Information|Image|Channel|NALightSheet #" + d2s((a+1),0), NAlightsheets[a]);
-			Ext.getMetadataValue("Information|Image|Channel|NADetection #" + d2s((a+1),0), NAdetections[a]);			
-			Ext.getMetadataValue("Information|Image|Channel|IlluminationWavelength|SinglePeak #" + d2s((a+1),0), WLlightsheets[a]);
-			Ext.getMetadataValue("Information|Image|Channel|DetectionWavelength|SinglePeak #" + d2s((a+1),0), WLdetections[a]);			
+		objective_wd = 0;
+		objective_immersion = "";
+		if ( type == ".czi" ) {
+			for(a=0; a<max_channels; a++) {
+				Ext.getMetadataValue("Information|Image|Channel|NALightSheet #" + d2s((a+1),0), NAlightsheets[a]);
+				Ext.getMetadataValue("Information|Image|Channel|NADetection #" + d2s((a+1),0), NAdetections[a]);			
+				Ext.getMetadataValue("Information|Image|Channel|IlluminationWavelength|SinglePeak #" + d2s((a+1),0), WLlightsheets[a]);
+				Ext.getMetadataValue("Information|Image|Channel|DetectionWavelength|SinglePeak #" + d2s((a+1),0), WLdetections[a]);		
+				
+				print ("RIlightsheet: " + RIlightsheet );
+				print ("NAlightsheets["+d2s(a,0)+"]: " + NAlightsheets[a] );
+			}
+		} else if ( type == "json/h5" ) {
+			// detection objective information -- cue json_obj text to beginning of selected objective
+			objective =  getValueByKeyJson("objective", input_json);
+			index = indexOf(input_json, '"objectives":');
+			json_obj = substring(input_json, index + lengthOf("objectives") + 3);
+			index = indexOf(json_obj, '"name": ' + '"' + objective + '"' );
+			json_obj = substring(json_obj, index + lengthOf(objective) + 10);
+
+			// now gather objective data
+			NAdetections[0] = parseFloat(getValueByKeyJson("na", json_obj));
+			objective_wd = 1000 * parseFloat( replace( getValueByKeyJson("wd_mm", json_obj), "[^0-9.]", "") );
+			objective_immersion = getValueByKeyJson("immersion", json_obj);
+
+			if ( objective_immersion == "water" ) {
+				RIlightsheet = 1.333;
+			} else if ( objective_immersion == "air" ) {
+				RIlightsheet = 1;
+			} else if ( objective_immersion == "glycerol" ) {
+				RIlightsheet = 1.47;
+			}
+
+			// laser information
+			index = indexOf(input_json, '"lasers":');
+			//json_laser = substring(input_json, index + lengthOf("lasers") + 3);
+			
+			//startIndex = indexOf(jsonString, "\"lasers\"");
+			endIndex = indexOf(input_json, "]", index) + 1;
+			lasersString = substring(input_json, index, endIndex);
+
+			// Split the "lasers" string into individual laser objects
+			laserList = split(lasersString, "{");
+
+			wavelength_sum = 0.0;
+			wavelength_number = 0;
+			
+			
+			// Loop through each laser object
+			for (ii = 1; ii < lengthOf(laserList); ii++) {
+			    laserObject = laserList[ii];
+			
+			    // Extract the "name" and "on" values from the laser object
+			    nameIndex = indexOf(laserObject, "\"name\"");
+			    onIndex = indexOf(laserObject, "\"on\"");
+			    onValue = substring(laserObject, onIndex + 6, indexOf(laserObject, ",", onIndex + 7));
+			
+			    // Parse the "wavelength_nm" if the laser is on
+			    if (onValue == "true") {
+			        wavelengthIndex = indexOf(laserObject, "\"wavelength_nm\"");
+			        wavelengthValue = parseFloat( substring(laserObject, wavelengthIndex + 17, indexOf(laserObject, ",", wavelengthIndex + 19)) );
+			
+			        // Print the laser name and wavelength
+			        //print("Wavelength: " + wavelengthValue);
+
+					wavelength_sum += wavelengthValue;
+					wavelength_number++;
+			    }
+			}
+			
+			// Average overall laser wavelength, ignoring intensities, etc
+			excitation = wavelength_sum / wavelength_number;
+
+			// default emission is 30nm + excitation
+			emission = excitation + 30;
+			
+			// filter wheel information
+			index = indexOf(input_json, '"filterwheels":');
+			json_fw = substring(input_json, index + lengthOf("filterwheels") + 3);
+			index = indexOf(json_fw, '"name": ' + '"' + 'fw_' + objective + '"' );
+			json_fw = substring(json_fw, index + lengthOf(objective) + 10);
+
+			// gather emission data
+			this_filter = getValueByKeyJson("selection", json_fw);
+			if ( startsWith(this_filter, "BP")  ) {
+				this_filter = substring(this_filter, 2);
+				wavelengths = split(this_filter,"-");
+				emission0 = parseFloat(replace(wavelengths[0], "[^0-9.]", ""));
+				emission1 = parseFloat(replace(wavelengths[1], "[^0-9.]", ""));
+				
+				if ( isNaN(emission0) || emission0 < 0 ) {
+					if ( !(isNaN(emission1)) && emission1 > 0 ) {
+						emission = emission1;
+					}
+				} else if ( isNaN(emission1) || emission1 < 0 ) {
+					if ( !(isNaN(emission0)) && emission0 > 0 ) {
+						emission = emission0;
+					}
+				} else {
+					emission = ( emission0 + emission1 ) / 2;
+				}
+
+			} else if ( startsWith(this_filter, "LP")  ) {
+					emission = parseFloat( replace( this_filter, "[^0-9.]", "") );
+					emission = emission + 30;
+			} else if ( startsWith(this_filter, "SP")  ) {
+					emission = parseFloat( replace( this_filter, "[^0-9.]", "") );
+					emission = emission - 30;
+			} else {
+				emission = parseFloat( replace( this_filter, "[^0-9.]", "") );
+			}
+			
+			if ( isNaN(excitation) || excitation < 0 ) {
+				if ( !(isNaN(emission)) && emission > 0 ) {
+					excitation = emission - 30;
+				}
+			}
+		
+			//print ( "emission: " + emission );
+			
+			WLlightsheets[0] = d2s(excitation,3);
+			WLdetections[0] = d2s(emission,3);
+			
+			// lightsheet thickness is located in beamexpander section -- this is w0 or the radius at beam waist
+			index = indexOf(input_json, '"beamexpander":');
+			json_beamexpander = substring(input_json, index + lengthOf("beamexpander") + 3);
+			index = indexOf(json_beamexpander, '"name": "beamexp"' );
+			json_beamexpander = substring(json_beamexpander, index + lengthOf("beamexp") + 10);
+			this_waist = getValueByKeyJson("selection", json_beamexpander);
+			//print( "json_beamexpander : " + this_waist ); 
+			this_waist = replace( this_waist, "&micro;", "u");
+			this_waist_multiplier = 1.0;
+			
+			if ( indexOf(this_waist,"um") >= 0 ) {
+				//microns -- do nothing
+			} else if ( indexOf(this_waist,"mm") >= 0 ) {
+				this_waist_multiplier = 1000.0;
+			} else if ( indexOf(this_waist,"cm") >= 0 ) {
+				this_waist_multiplier = 10000.0;
+			} else if ( indexOf(this_waist,"nm") >= 0 ) {
+				this_waist_multiplier = 0.001;
+			}
+			
+			// calculate lightsheet NA					
+			// beam_waist = RI_immersion * lambda_lightsheet / ( NA_lightsheet * PI );
+			// NA = (1.55) * .488 / ( PI * 3.889772 )
+			//	( PI * 3.889772 ) = 12.22						
+			//NAlightsheets[0] = d2s(RIlightsheet * WLlightsheets[0]/1000 / ( PI * beam_waist),10);
+			NAlightsheets[0] = d2s(RIlightsheet * (parseFloat(WLlightsheets[0])/1000) / ( PI * parseFloat( replace(this_waist, "[^0-9.]", ""))  * this_waist_multiplier ),10);
+			//print ("RIlightsheet: " + RIlightsheet );
+			//print ("NAlightsheets[0]: " + NAlightsheets[0] + " based on " + d2s(parseFloat( replace(this_waist, "[^0-9.]", "")),6) );
 		}
+		
+		
 		
 		for (t=0; t<max_time; t++ ) {		
 			for(a=0; a<nPositions; a++) {
 				//print ("About to open " + "Bio-Formats", "open=[" + file + "] color_mode=Default rois_import=[ROI manager] specify_range view=Hyperstack stack_order=XYCZT series_"+ d2s(a+1,0) + " t_begin_" + d2s(a+1,0) + "=" + d2s(t+1,0) + " t_end_" + d2s(a+1,0) + "=" + d2s(t+1,0) + " t_step_" + d2s(a+1,0) + "=1" );
 				//exit();                
 				//run("Bio-Formats", "open=[/media/martin/Dominguez Data/Onset of F6-nGFP/2019-01-24 embryo B -- keep, 2v/1-24 embryo B 00.czi] color_mode=Default rois_import=[ROI manager] specify_range view=Hyperstack stack_order=XYCZT series_2 t_begin_2=3 t_end_2=3 t_step_2=1");
-
-				if ( nPositions == 1 ) {
-					run("Bio-Formats", "open=[" + file + "] color_mode=Default rois_import=[ROI manager] specify_range view=Hyperstack stack_order=XYCZT " + " t_begin=" + d2s(t+1,0) + " t_end=" + d2s(t+1,0) + " t_step=1" );	
-				} else {
-					run("Bio-Formats", "open=[" + file + "] color_mode=Default rois_import=[ROI manager] specify_range view=Hyperstack stack_order=XYCZT series_"+ d2s(a+1,0) + " t_begin_" + d2s(a+1,0) + "=" + d2s(t+1,0) + " t_end_" + d2s(a+1,0) + "=" + d2s(t+1,0) + " t_step_" + d2s(a+1,0) + "=1" );
+				if ( type == ".czi" ) {
+					if ( nPositions == 1 ) {
+						run("Bio-Formats", "open=[" + file + "] color_mode=Default rois_import=[ROI manager] specify_range view=Hyperstack stack_order=XYCZT " + " t_begin=" + d2s(t+1,0) + " t_end=" + d2s(t+1,0) + " t_step=1" );	
+					} else {
+						run("Bio-Formats", "open=[" + file + "] color_mode=Default rois_import=[ROI manager] specify_range view=Hyperstack stack_order=XYCZT series_"+ d2s(a+1,0) + " t_begin_" + d2s(a+1,0) + "=" + d2s(t+1,0) + " t_end_" + d2s(a+1,0) + "=" + d2s(t+1,0) + " t_step_" + d2s(a+1,0) + "=1" );
+					}
+				} else if ( type == "json/h5" ) {
+					//run("N5", "n5=["+file+"/Data]");
+					js = 'importClass(Packages.loci.plugins.in.ImporterOptions);importClass(Packages.org.janelia.saalfeldlab.n5.ij.N5Importer);var filePath = '+ '"' + file + '/Data' + '"' + ';var importer = new N5Importer();importer.process(filePath, false );';
+					//print( "JS=" + js );
+					result = eval("js",js);
 				}
 				
 				//Get name of opened stack	
@@ -1277,9 +1666,19 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 				rename( "Image" + rand_num );
 				title = getTitle();
 				getDimensions(dim_width, dim_height, dim_channels, dim_slices, dim_frames);
-				getVoxelSize(vox_width, vox_height, vox_depth, vox_unit);
-				voxel_definition_output = "unit=" + vox_unit + " pixel_width=" + d2s(vox_width,10) + " pixel_height=" + d2s(vox_height,10) + " voxel_depth=" + d2s(vox_depth,10); //will use later when we output the file
 				
+				getVoxelSize(vox_width, vox_height, vox_depth, vox_unit);
+				if ( type == "json/h5" ) {
+					voxel_size_um = getValueByKeyJson("voxel_size_um", input_json);
+					vox_width = parseFloat( getValueByKeyJson("width", voxel_size_um) );
+					vox_height =  parseFloat( getValueByKeyJson("height", voxel_size_um) );
+					vox_depth =  parseFloat( getValueByKeyJson("depth", voxel_size_um) );
+					vox_unit = "um";
+					//print ( "vox_json: " + voxel_height_um + " " + voxel_depth_um );
+				}
+				
+				voxel_definition_output = "unit=" + vox_unit + " pixel_width=" + d2s(vox_width,10) + " pixel_height=" + d2s(vox_height,10) + " voxel_depth=" + d2s(vox_depth,10); //will use later when we output the file
+				//print ( " vox -- " + voxel_definition_output );
 				//make all units nanometers
 				if (vox_unit=="nm" || vox_unit=="nanometers" || vox_unit=="nanometer") {
 					//do nothing
@@ -1324,7 +1723,7 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 				}
 		
 				fileoutname = newArray(channelList.length);
-				
+				viewpsfname = newArray(channelList.length);
 				psf_id = newArray(max_channels);
 				Array.fill(psf_id,NaN); // default is no fill
 				
@@ -1332,8 +1731,17 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 				//Array.fill(lambdas,0); //no regularization by default
 				
 				//figure out file out names
-				for (b=0; b<channelList.length; b++ ) {
-					fileoutname[b] = "LSFM_T" + IJ.pad(this_time,4) + "_C" + IJ.pad(b,1) + "_A" + IJ.pad(d2s(round(angles[a]),0),3);
+				
+				if ( type == ".czi" ) {
+					for (b=0; b<channelList.length; b++ ) {
+						fileoutname[b] = "LSFM_T" + IJ.pad(this_time,4) + "_C" + IJ.pad(b,1) + "_A" + IJ.pad(d2s(round(angles[a]),0),3);
+						viewpsfname[b] = 0;
+					}
+				} else if ( type == "json/h5" ) {
+					for (b=0; b<channelList.length; b++ ) {
+						fileoutname[b] = "LSFM_T" + IJ.pad(name_ext[2],4) + "_C" + IJ.pad(name_ext[3],1) + "_A" + IJ.pad(d2s(round(angles[a]),0),3) + "_V" + IJ.pad(b,1) + IJ.pad(name_ext[5],1);
+						viewpsfname[b] = name_ext[5];
+					}
 				}
 				
 				//do PSFs separately since they require batchmode to be off
@@ -1341,7 +1749,7 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 					//print( "c"+b + ": " + d2s(NAlightsheets[b],4) + " " +  d2s(WLlightsheets[b],4) + " " + d2s(RIlightsheet,4) + " " + d2s(angles[a],4) );
 					if ( NAlightsheets[b] > 0 && WLlightsheets[b] > 0 && RIlightsheet > 0 && !(isNaN(angles[a]) ) ) {
 						
-						this_PSF_identifier = NAdetections[b] + "//" + NAlightsheets[b] + "//" + RIlightsheet + "//" + WLlightsheets[b] + "//" + WLdetections[b] + "//" + d2s(vox_width,8) + "//" + d2s(vox_depth,8) + "//" + d2s(dim_width/5,8) + "//" + Olightsheet;
+						this_PSF_identifier = NAdetections[b] + "//" + NAlightsheets[b] + "//" + RIlightsheet + "//" + WLlightsheets[b] + "//" + WLdetections[b] + "//" + d2s(vox_width,8) + "//" + d2s(vox_depth,8) + "//" + d2s(dim_width/5,8) + "//" + Olightsheet + "//" + viewpsfname[b];
 						
 						//see if we have done this PSF before
 						is_match = -1;
@@ -1366,15 +1774,33 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 							setBatchMode("exit and display"); //needed for PSF generation
 							setBatchMode(false);
 
-							WD_CS_return = Zeiss_WDforObjective( Olightsheet );
+							WD_CS_return = newArray(3); // WD, coverslip, nominal RIimmersion
+
+							if ( type == ".czi" ) {
+								WD_CS_return = Zeiss_WDforObjective( Olightsheet );
+							} else if ( type == "json/h5" ) {
+								WD_CS_return[0] = objective_wd;
+								WD_CS_return[1] = 0;
+								
+								if ( indexOf( objective_immersion, "air") >= 0 || indexOf( objective_immersion, "dry") >= 0 ) {
+									WD_CS_return[1] = 170;
+								}
+							}
+							if ( WD_CS_return[2] > RIlightsheet ) {
+								RIlightsheet = WD_CS_return[2];
+							}			
 							tissue_RI = default_tissue_refractive_index;
-							if ( RIlightsheet > default_tissue_refractive_index ) {
+							if ( RIlightsheet > tissue_RI ) {
 								tissue_RI = RIlightsheet;
 							}
 							
 							PSF_name = LS_PSF_generator ( parseFloat(NAdetections[b]), parseFloat(NAlightsheets[b]), parseFloat(RIlightsheet), tissue_RI, parseFloat(WLlightsheets[b]), parseFloat(WLdetections[b]), vox_width, vox_depth, dim_width/5, WD_CS_return[0], WD_CS_return[1] ); //estimate lightsheet radius from w(0) as being 1/4th the total width of the acquired image -- this should cut it about midway
 							selectWindow( PSF_name );
 							
+							// reverse PSF for right-camera views since they have far-field late in the stack rather than early
+							if ( type == "json/h5" && parseInt(viewpsfname[b]) > 0 ) {
+								run("Reverse");
+							}
 							
 							run("Enhance Contrast...", "saturated=0 process_all use");
 							run("16-bit");
@@ -1492,7 +1918,11 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 						run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLFloatIterativeDeconvolver3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLOptions);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.IterativeEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar options = new WPLOptions(); options.setNormalize(true);\nvar frgt = new WPLFloatIterativeDeconvolver3D(WindowManager.getImage(" + d2s(img_id, 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), IterativeEnums.BoundaryType.REFLEXIVE, IterativeEnums.ResizingType.AUTO, Enums.OutputType.FLOAT, " + d2s(deconvolution_iterations,0) +", false, options ).deconvolve().show();\n";
 					}
 					//print (run_script);
-					eval( "js", run_script );  //throw away result
+					if ( deconvolve_yes ) {
+						eval( "js", run_script );  //throw away result
+					} else {
+						run("Duplicate...", "duplicate");
+					}
 
 					if ( do_twice ) {
 						next_img_id = getImageID(); //get new image ID
@@ -1525,7 +1955,11 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 							run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLFloatIterativeDeconvolver3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLOptions);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.IterativeEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar options = new WPLOptions(); options.setNormalize(true);\nvar frgt = new WPLFloatIterativeDeconvolver3D(WindowManager.getImage(" + d2s(img_id, 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), IterativeEnums.BoundaryType.REFLEXIVE, IterativeEnums.ResizingType.AUTO, Enums.OutputType.FLOAT, " + d2s(deconvolution_iterations,0) +", false, options ).deconvolve().show();\n";
 						}
 						//print (run_script);
-						eval( "js", run_script );  //throw away result
+						if ( deconvolve_yes ) {
+							eval( "js", run_script );  //throw away result
+						} else {
+							run("Duplicate...", "duplicate");
+						}
 						next_img_id = getImageID(); //get new image ID
 						
 						//close original image
@@ -1566,7 +2000,7 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 					File.append( file + ": angle " + string_angles[a] + ", time " + d2s(t+1,0) + " of " + d2s(max_time,0) + ", channel " + d2s(b,0) + " >> " + outputDirectory + file_sep + fileoutname[b] + ".tif", outputDirectory + file_sep + "CZI_to_TIF_with_deconvolution.txt" );
 				}
 
-
+				//print ( XXXX );
 			}
 			//Close original concatenated stack
 			close("C*");   
@@ -1575,7 +2009,9 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 		//close();
 		Ext.close();
 		call("java.lang.System.gc");
-	}	
+		
+		//print( "file: " + file +", " + d2s(i+1,0) + " of " + processList.length );
+	}
 }
 
 function main_series_tif_to_anaglyphs(directory,outputDirectory) {
@@ -1659,7 +2095,7 @@ function main_series_tif_to_anaglyphs(directory,outputDirectory) {
 		
 		for (i=0; i<process_file_list.length; i++) {
 		//for (i=0; i<1; i++) {
-			name_ext = split(process_file_list[i],"///");
+			name_ext = split(process_file_list[i],"(///)");
 			if ( name_ext[0] != view_setups[m] ) {
 				continue;
 			}
@@ -1862,7 +2298,7 @@ function main_time_series_tif_to_mip(directory,outputDirectory) {
 		max_sizeZ = 0;
 		
 		for (i=0; i<process_file_list.length; i++) {
-			name_ext = split(process_file_list[i],"///");
+			name_ext = split(process_file_list[i],"(///)");
 			if ( name_ext[0] != view_setups[m] ) {
 				continue;
 			}
@@ -2090,7 +2526,7 @@ function main_klb_to_mip(directory) {
 		processList = newArray(0);
 		
 		for (i=0; i<process_file_list.length; i++) {
-			name_ext = split(process_file_list[i],"///");
+			name_ext = split(process_file_list[i],"(///)");
 			if ( name_ext[0] != view_setups[m] ) {
 				continue;
 			}
@@ -2524,7 +2960,7 @@ function main_tifseries_16bit_to_8bit(folder_in_batch,directory,outputDirectory)
 		max_sizeZ = 0;
 		
 		for (i=0; i<process_file_list.length; i++) {
-			name_ext = split(process_file_list[i],"///");
+			name_ext = split(process_file_list[i],"(///)");
 			if ( name_ext[0] != view_setups[m] ) {
 				continue;
 			}
@@ -3188,7 +3624,7 @@ function main_stacks_to_partial_collapse (directory,collapse_Z_size_micron,overl
 		
 		for (i=0; i<process_file_list.length; i++) {
 		//for (i=0; i<1; i++) {
-			name_ext = split(process_file_list[i],"///");
+			name_ext = split(process_file_list[i],"(///)");
 			if ( name_ext[0] != view_setups[m] ) {
 				continue;
 			}
@@ -3492,7 +3928,7 @@ function main_extract_defined_slices(directory) {
 		}
 		
 		for (i=0; i<process_file_list.length; i++) {
-			name_ext = split(process_file_list[i],"///");
+			name_ext = split(process_file_list[i],"(///)");
 			if ( name_ext[0] != view_setups[m] ) {
 				continue;
 			}
@@ -3808,12 +4244,15 @@ macro "0. Change LSFM processing settings..." {
 	Dialog.create("LSFM processing settings...");
 	Dialog.setInsets(0,0,0);
 	Dialog.addMessage("LSFM .czi deconvolution settings...",16,"Black");
+	Dialog.addCheckbox("Deconvolve stacks before writing in .tif format", deconvolve_yes );
 	Dialog.addNumber("Max depth (slices) for large stack blockwise deconvolution:", max_slice_depth);
 	//Dialog.addMessage("  heap allocation in MB should be 200 times max slice depth");
 	Dialog.addNumber("# iterations (0 non-iterative OR >1 iterative):", deconvolution_iterations);
 	Dialog.addNumber("Regression coefficient multiplier (non-iterative only):", deconvolution_regression_parameter);
 	Dialog.addCheckbox("Attempt to subtract camera noise from stack", deconvolution_subtract_camera_noise );
 	Dialog.addNumber("Detection NA penalty (% of NA, improves aberration handling):", detection_NA_penalty );
+	Dialog.addNumber("Default tissue RI (when metadata does not specify):", default_tissue_refractive_index );
+	Dialog.addNumber("Default immersion RI (when metadata does not specify):", default_immersion_refractive_index );
 	Dialog.addMessage("\n\n");
 	Dialog.setInsets(0,0,0);
 	Dialog.addMessage("\n\nLSFM .tif filtering settings...",16,"Black");
@@ -3826,11 +4265,14 @@ macro "0. Change LSFM processing settings..." {
 	Dialog.addCheckbox("Bright blob removal (single image only)", fixed_blob_removal);	
 	Dialog.show();
 
+	deconvolve_yes = Dialog.getCheckbox();
 	max_slice_depth = Dialog.getNumber();
 	deconvolution_iterations = floor( Dialog.getNumber() );
 	deconvolution_regression_parameter = Dialog.getNumber();
 	deconvolution_subtract_camera_noise = Dialog.getCheckbox();
 	detection_NA_penalty = Dialog.getNumber();
+	default_tissue_refractive_index = Dialog.getNumber();
+	default_immersion_refractive_index = Dialog.getNumber();
 	generate_mips_when_filtering = Dialog.getCheckbox();
 	convert_to_8_bit = Dialog.getCheckbox();
 	rolling_ball_radius = Dialog.getNumber();
@@ -3848,15 +4290,15 @@ macro "1. Deconvolve single Z.1 or UM2 acquisitions with large stacks (single fi
 	setBatchMode("exit and display");
 	print("DONE: Deconvolve single Z.1 or UM2 acquisitions with large stacks (single file).");
 }
-macro "1. Deconvolve Z.1 time series .czi files (folder in batch)..." {
+macro "1. Deconvolve Z.1 or MuVi time series .czi files (folder in batch)..." {
 	main_ijm_deconvolve_series("","",false);
 	setBatchMode("exit and display");
-	print("DONE: Deconvolve Z.1 time series .czi files (folder in batch).");
+	print("DONE: Deconvolve Z.1 or MuVi time series .czi files (folder in batch).");
 }
-macro "1. Deconvolve x2 (very slow) Z.1 time series .czi files (folder in batch)..." {
+macro "1. Deconvolve x2 (very slow) Z.1 or MuVi time series .czi files (folder in batch)..." {
 	main_ijm_deconvolve_series("","",true);
 	setBatchMode("exit and display");
-	print("DONE: Deconvolve x2 (very slow) Z.1 time series .czi files (folder in batch).");
+	print("DONE: Deconvolve x2 (very slow) Z.1 or MuVi time series .czi files (folder in batch).");
 }
 macro "2. Filter and unify z-depth of LSFM .tif files (best for time series; folder in batch)..." {
 	main_tifseries_16bit_to_8bit(true,"","");
