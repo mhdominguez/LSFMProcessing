@@ -1,5 +1,5 @@
 # LSFMProcessing
-A collection of methods for deconvolving, filtering, and rendering LSFM images. This collection is currently designed to take Zeiss ZEN .czi or Lavision UM2 .ome.tiff input files, though it could be generalized to accept any [proprietary] input format that BioFormats allows.
+A collection of methods for deconvolving, filtering, and rendering LSFM images. This collection is currently designed to take Zeiss ZEN .czi, Lavision UM2 .ome.tiff, or Luxendo .h5/.json input files, though it could be generalized to accept any [proprietary] input format that BioFormats allows.
 <br><br>
 ## Main Fiji Methods (LSFM Processing Macros.ijm)
 ### Installation / Requirements:
@@ -7,7 +7,10 @@ A collection of methods for deconvolving, filtering, and rendering LSFM images. 
 * BigStitcher, Bio-Formats, SiMView packages installed (checked) in Fiji Update
 * [PSF generator](http://bigwww.epfl.ch/algorithms/psfgenerator/) 18.12.2017
   - download Fiji plugin and place PSF_Generator.jar in plugins folder
-* [Parallel Spectral Deconvolution ](https://sites.google.com/site/piotrwendykier/software/deconvolution/parallelspectraldeconvolution) 1.12
+* [Parallel Spectral Deconvolution](https://sites.google.com/site/piotrwendykier/software/deconvolution/parallelspectraldeconvolution) 1.12
+  - download plugin binary zip file and copy all *.jar files to plugins folder
+  - delete file jars/jtransforms-2.4.jar before using deconvolution
+* [Parallel Iterative Deconvolution (if using iterative deconvolution)](https://sites.google.com/site/piotrwendykier/software/deconvolution/paralleliterativedeconvolution) 1.12
   - download plugin binary zip file and copy all *.jar files to plugins folder
   - delete file jars/jtransforms-2.4.jar before using deconvolution
 * pyklb and h5py installed on system for h5/klb functions
