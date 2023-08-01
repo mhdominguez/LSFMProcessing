@@ -4290,12 +4290,12 @@ macro "1. Deconvolve single Z.1 or UM2 acquisitions with large stacks (single fi
 	setBatchMode("exit and display");
 	print("DONE: Deconvolve single Z.1 or UM2 acquisitions with large stacks (single file).");
 }
-macro "1. Deconvolve Z.1 or MuVi time series .czi files (folder in batch)..." {
+macro "1. Deconvolve Z.1 or MuVi time series files (folder in batch)..." {
 	main_ijm_deconvolve_series("","",false);
 	setBatchMode("exit and display");
 	print("DONE: Deconvolve Z.1 or MuVi time series .czi files (folder in batch).");
 }
-macro "1. Deconvolve x2 (very slow) Z.1 or MuVi time series .czi files (folder in batch)..." {
+macro "1. Deconvolve x2 (very slow) Z.1 or MuVi time series files (folder in batch)..." {
 	main_ijm_deconvolve_series("","",true);
 	setBatchMode("exit and display");
 	print("DONE: Deconvolve x2 (very slow) Z.1 or MuVi time series .czi files (folder in batch).");
@@ -4369,7 +4369,7 @@ macro "4. Convert fused .h5 to .klb (folder in batch, requires h5/xml split to 1
 }
 macro "5. Create .klb BigDataViewer dataset.xml file..." {
 	run("Open KLB");
-	print("DONE: Create .klb BigDataViewer dataset.xml file.");
+	//print("DONE: Create .klb BigDataViewer dataset.xml file.");
 }
 macro "5. Convert t0XXXX .klb files to anaglyphs or MIPs (folder in batch)..." {
 	main_klb_to_mip("");
