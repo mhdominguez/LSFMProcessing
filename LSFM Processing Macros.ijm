@@ -1122,7 +1122,7 @@ function getValueByKeyJson(key, jsonText) {
 }
 
 function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {	
-	
+
 	if ( directory == "" || !File.exists(directory) ) {
 		//Ask user to choose the input and output directories
 		directory = getDirectory("Choose input directory");
@@ -1211,10 +1211,14 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 		for (i=0; i<folderList.length; i++) {
 			//print( " checking1: " + directory + "raw" + file_sep + folderList[i] );
 			if ( File.isDirectory(directory + "raw" + file_sep + folderList[i]) ) {
+				if ( endsWith(folderList[i],"/") || endsWith(folderList[i],file_sep) ) {
+					folderList[i] = substring(folderList[i],0,lengthOf(folderList[i])-1);
+				} 
 				thisFileList = getFileList(directory + "raw" + file_sep + folderList[i]);
 				
 				for (ii=0; ii<thisFileList.length; ii++) {
-					fileList = Array.concat( fileList, "raw" + file_sep + folderList[i] + thisFileList[ii] );
+					fileList = Array.concat( fileList, "raw" + file_sep + folderList[i] + file_sep + thisFileList[ii] );
+					//print( " go " + "raw" + file_sep + folderList[i] );
 				}
 			}
 		}
@@ -1314,7 +1318,6 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 		name_ext = split(processList[i],"(///)");
 		//file = directory + name_ext[1];
 		file = directory + name_ext[1];
-		
 		if ( type == ".czi" ) {
 			
 			Ext.setId(file);
@@ -1656,9 +1659,11 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 					}
 				} else if ( type == "json/h5" ) {
 					//run("N5", "n5=["+file+"/Data]");
-					js = 'importClass(Packages.loci.plugins.in.ImporterOptions);importClass(Packages.org.janelia.saalfeldlab.n5.ij.N5Importer);var filePath = '+ '"' + file + '/Data' + '"' + ';var importer = new N5Importer();importer.process(filePath, false );';
+					file_js = replace(file, "\\", "/");
+					js = 'importClass(Packages.loci.plugins.in.ImporterOptions);importClass(Packages.org.janelia.saalfeldlab.n5.ij.N5Importer);var filePath = '+ '"' + file_js + '/Data' + '"' + ';var importer = new N5Importer();importer.process(filePath, false );';
 					//print( "JS=" + js );
 					result = eval("js",js);
+					//print( "eval'd" );
 				}
 				
 				//Get name of opened stack	
@@ -1918,12 +1923,13 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 						run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLFloatIterativeDeconvolver3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLOptions);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.IterativeEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar options = new WPLOptions(); options.setNormalize(true);\nvar frgt = new WPLFloatIterativeDeconvolver3D(WindowManager.getImage(" + d2s(img_id, 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), IterativeEnums.BoundaryType.REFLEXIVE, IterativeEnums.ResizingType.AUTO, Enums.OutputType.FLOAT, " + d2s(deconvolution_iterations,0) +", false, options ).deconvolve().show();\n";
 					}
 					//print (run_script);
+					//print ( "1_orig ID " + img_id + ", next_img_ID " + getImageID() );
 					if ( deconvolve_yes ) {
 						eval( "js", run_script );  //throw away result
 					} else {
 						run("Duplicate...", "duplicate");
 					}
-
+					
 					if ( do_twice ) {
 						next_img_id = getImageID(); //get new image ID
 						
