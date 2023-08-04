@@ -4249,7 +4249,7 @@ macro "  " {
 macro "0. Change LSFM processing settings..." {
 	Dialog.create("LSFM processing settings...");
 	Dialog.setInsets(0,0,0);
-	Dialog.addMessage("LSFM .czi deconvolution settings...",16,"Black");
+	Dialog.addMessage("LSFM deconvolution settings...",16,"Black");
 	Dialog.addCheckbox("Deconvolve stacks before writing in .tif format", deconvolve_yes );
 	Dialog.addNumber("Max depth (slices) for large stack blockwise deconvolution:", max_slice_depth);
 	//Dialog.addMessage("  heap allocation in MB should be 200 times max slice depth");
