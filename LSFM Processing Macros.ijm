@@ -1500,8 +1500,8 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 				Ext.getMetadataValue("Information|Image|Channel|IlluminationWavelength|SinglePeak #" + d2s((a+1),0), WLlightsheets[a]);
 				Ext.getMetadataValue("Information|Image|Channel|DetectionWavelength|SinglePeak #" + d2s((a+1),0), WLdetections[a]);		
 				
-				print ("RIlightsheet: " + RIlightsheet );
-				print ("NAlightsheets["+d2s(a,0)+"]: " + NAlightsheets[a] );
+				//print ("RIlightsheet: " + RIlightsheet );
+				//print ("NAlightsheets["+d2s(a,0)+"]: " + NAlightsheets[a] );
 			}
 		} else if ( type == "json/h5" ) {
 			// detection objective information -- cue json_obj text to beginning of selected objective
