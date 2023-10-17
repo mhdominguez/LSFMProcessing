@@ -449,6 +449,9 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 		Array.fill(string_angles,NaN); // default angle is NaN
 		Array.fill(angles,NaN); // default angle is NaN
 		
+		sizeI = 1; // number of illuminations
+		sizeC = 1; // true channel number
+		
 		if ( type == ".czi" ) {
 			//get refractive index
 			//although this will retrieve metadata only from active series, refractive index is not different for each channel or view but instead is the same for everything
@@ -468,7 +471,36 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 			if ( WD_CS_return[2] > RIlightsheet ) {
 				RIlightsheet = WD_CS_return[2];
 			}
+			
+			//identify multi-illumination datasets
+			//sizeI = 1;
+			Ext.getMetadataValue("Information|Image|SizeI", sizeI);
+			if ( isNaN(sizeI) ) {
+				sizeI = 1;
+			} else {
+				sizeI = parseInt(sizeI);
+			}
+			if ( isNaN(sizeI) || sizeI < 1 ) {
+				sizeI = 1;
+			}
 
+			//identify multi-view datasets
+			sizeV = 1;
+			Ext.getMetadataValue("Information|Image|SizeV", sizeV);
+			if ( isNaN(sizeV) ) {
+				sizeV = 1;
+			} else {
+				sizeV = parseInt(sizeV);
+			}
+			if ( isNaN(sizeV) || sizeV < 1 ) {
+				sizeV = 1;
+			}
+			
+			if ( sizeV != nPositions ) {
+				print ( "Mismatch between views/positions in file and metadata, " + d2s(nPositions,0) + " vs. " + d2s(sizeV,0) + ", in " + directory + file_sep + name_ext[1] + "!\n" );
+				continue;
+			}
+			
 			//grab initial angles from file
 			if ( nPositions < 1) {
 				print ( "Fewer than one view/position present in file " + directory + file_sep + name_ext[1] + "!\n" );
@@ -589,14 +621,39 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 		Array.fill(WLdetections,0); // default WL is 0
 
 		if ( type == ".czi" ) {
+			
+			sizeC = 1;
+			Ext.getMetadataValue("Information|Image|SizeI", sizeC);
+			if ( isNaN(sizeC) ) {
+				sizeC = 1;
+			} else {
+				sizeC = parseInt(sizeC);
+			}
+			if ( isNaN(sizeC) || sizeC < 1 ) {
+				sizeC = 1;
+			}
+				
+			if ( sizeI > 1 ) {
+				if ( max_channels != sizeC * sizeI ) {
+					print ( "Mismatch between channels and illuminations in file and metadata, " + d2s(max_channels,0) + " vs. " + d2s(sizeC,0) + ", in " + directory + file_sep + name_ext[1] + "!\n" );
+				}
+			}
+			
+			
 			for(a=0; a<max_channels; a++) {
-				Ext.getMetadataValue("Information|Image|Channel|NALightSheet #" + d2s((a+1),0), NAlightsheets[a]);
-				Ext.getMetadataValue("Information|Image|Channel|NADetection #" + d2s((a+1),0), NAdetections[a]);
-				Ext.getMetadataValue("Information|Image|Channel|IlluminationWavelength|SinglePeak #" + d2s((a+1),0), WLlightsheets[a]);
-				Ext.getMetadataValue("Information|Image|Channel|DetectionWavelength|SinglePeak #" + d2s((a+1),0), WLdetections[a]);
+				aa = a;
+				if ( sizeI > 1 && a >= sizeC ) {
+					aa = a - sizeC; // capture illuminations as repeated sequence in channels
+				}
+				Ext.getMetadataValue("Information|Image|Channel|NALightSheet #" + d2s((aa+1),0), NAlightsheets[a]);
+				Ext.getMetadataValue("Information|Image|Channel|NADetection #" + d2s((aa+1),0), NAdetections[a]);
+				Ext.getMetadataValue("Information|Image|Channel|IlluminationWavelength|SinglePeak #" + d2s((aa+1),0), WLlightsheets[a]);
+				Ext.getMetadataValue("Information|Image|Channel|DetectionWavelength|SinglePeak #" + d2s((aa+1),0), WLdetections[a]);
 				
 				print( "  ..examining " + name_ext[0] + " ...channel " + d2s(a,0) + " parameters: NAill " + d2s(NAlightsheets[a],6) + ", NAdet " + d2s(NAdetections[a],6) + ", WLill " + d2s(WLlightsheets[a],2) + ", WLdet " + d2s(WLdetections[a],2) );
 			}
+		} else {
+			sizeC = max_channels;
 		}
 
 		for (t=0; t<max_time; t++ ) {		
@@ -728,8 +785,22 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 				//Array.fill(lambdas,0); //no regularization by default
 				
 				//figure out file out names
-				for (b=0; b<channelList.length; b++ ) {
-					fileoutname[b] = "LSFM__" + replace(name_ext[0],' ','_') + "__C" + IJ.pad(b,1) + "__A" + IJ.pad(d2s(round(angles[a]),0),3);
+				if ( sizeI > 1 ) {
+					for (b=0; b<channelList.length; b++ ) {
+						bb = b;
+						il = 0;
+						if ( bb >= sizeC ) { //perform modulo operation
+							while ( bb >= sizeC ) {
+								bb -= sizeC;
+								il++;
+							}
+						}
+						fileoutname[b] = "LSFM__" + replace(name_ext[0],' ','_') + "__C" + IJ.pad(bb,1) + "__A" + IJ.pad(d2s(round(angles[a]),0),3) + "__V" + IJ.pad(il,1);
+					}
+				} else {
+					for (b=0; b<channelList.length; b++ ) {
+						fileoutname[b] = "LSFM__" + replace(name_ext[0],' ','_') + "__C" + IJ.pad(b,1) + "__A" + IJ.pad(d2s(round(angles[a]),0),3);
+					}
 				}
 				
 				//do PSFs separately since they require batchmode to be off
@@ -1343,6 +1414,36 @@ function main_ijm_deconvolve_series(directory,outputDirectory,do_twice) {
 			if ( Olightsheet == "" || Olightsheet == 0 ) {
 				Ext.getMetadataValue("Experiment|AcquisitionBlock|AcquisitionModeSetup|Objective", Olightsheet);
 			}
+			
+			//identify multi-illumination datasets
+			sizeI = 1;
+			Ext.getMetadataValue("Information|Image|SizeI", sizeI);
+			if ( isNaN(sizeI) ) {
+				sizeI = 1;
+			} else {
+				sizeI = parseInt(sizeI);
+			}
+			if ( isNaN(sizeI) || sizeI < 1 ) {
+				sizeI = 1;
+			}
+
+			//identify multi-view datasets
+			sizeV = 1;
+			Ext.getMetadataValue("Information|Image|SizeV", sizeV);
+			if ( isNaN(sizeV) ) {
+				sizeV = 1;
+			} else {
+				sizeV = parseInt(sizeV);
+			}
+			if ( isNaN(sizeV) || sizeV < 1 ) {
+				sizeV = 1;
+			}
+			
+			if ( sizeV != nPositions ) {
+				print ( "Mismatch between views/positions in file and metadata, " + d2s(nPositions,0) + " vs. " + d2s(sizeV,0) + ", in " + directory + file_sep + name_ext[1] + "!\n" );
+				continue;
+			}
+			
 			//grab initial angles from file
 			if ( nPositions < 1) {
 				print ( "Fewer than one view/position present in file " + directory + name_ext[1] + "!\n" );
