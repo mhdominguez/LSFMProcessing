@@ -19,7 +19,7 @@ if len(sys.argv) > 1:
 	if os.path.exists(os.path.dirname(sys.argv[1])):
 		os.chdir(sys.argv[1])
 	elif sys.argv[1].startswith("8") or ( len(sys.argv) > 2 and sys.argv[2].startswith("8") ):
-		bits = "8"
+		outbits = "8"
 	      
 for root, dirs, files in os.walk("."):
 	for filename in files:

@@ -13,8 +13,8 @@
 //     Parallel Iterative Deconvolution 1.12 (if using iterative deconvolution, https://sites.google.com/site/piotrwendykier/software/deconvolution/paralleliterativedeconvolution)
 //       - download plugin binary zip file and copy all *.jar files to plugins folder
 //       - delete file jars/jtransforms-2.4.jar before using deconvolution
-//     pyklb and h5py installed separately for h5/klb functions
-//       - on Ubuntu, can use "sudo pip3 install git+https://github.com/bhoeckendorf/pyklb.git@skbuild h5py" at console to install
+//     h5py and scikit-image installed separately
+//       - on Ubuntu, can use "sudo pip3 install h5py scikit-image" at console to install
 
 function show_instructions () {
 	Dialog.create("LSFM processing install info/instructions...");
@@ -33,8 +33,8 @@ function show_instructions () {
     Dialog.addMessage("       - download plugin binary zip file (https://sites.google.com/site/piotrwendykier/software/deconvolution/paralleliterativedeconvolution)",12,"Black");
     Dialog.addMessage("       - unzip and copy all *.jar files to Fiji plugins folder",12,"Black");
     Dialog.addMessage("       - delete file jtransforms-2.4.jar in Fiji jars folder before using deconvolution",12,"Black");
-    Dialog.addMessage("   pyklb and h5py installed on system, for h5/klb functions",14,"Black");
-    Dialog.addMessage("       - on Ubuntu, can use \"sudo pip3 install git+https://github.com/bhoeckendorf/pyklb.git@skbuild h5py\" at console to install",12,"Black");
+    #Dialog.addMessage("   h5py and scikit-image installed on system",14,"Black");
+    Dialog.addMessage("       - on Ubuntu, can use \"sudo pip3 install h5py scikit-image\" at console to install",12,"Black");
 	Dialog.show();
 }
 
@@ -44,14 +44,15 @@ var rolling_ball_radius = 200;
 var fixed_rolling_ball_radius = 500;
 var fixed_blob_removal = false;
 var fixed_precipitate_removal = true;
-var convert_to_8_bit = true;
+var convert_to_8_bit = false;
 var generate_mips_when_filtering = true;
 var deconvolution_regression_parameter = 50;
 var deconvolution_iterations = 0;
-var deconvolution_subtract_camera_noise = true;
+var deconvolution_subtract_camera_noise = false;
 var deconvolve_yes = true;
 var detection_NA_penalty = 10;
-var path_dataset_folder_export_all_h5_to_klb_pyklb = "dataset_folder_export_all_h5_to_klb_pyklb.py";
+var path_dataset_folder_export_all_h5_to_tif_pyklb = "dataset_folder_export_all_h5_to_TIFs_scikit-image.py";
+var user_filter_gamma = 0.75;
 
 var default_tissue_refractive_index = 1.4;
 var default_immersion_refractive_index = 1.333;
@@ -2459,7 +2460,7 @@ function main_klb_to_mip(directory) {
 	Array.sort(fileList); //very critical step, can be done here or done to array processList below
 	
 	for (i=0; i<fileList.length; i++) {
-		if (startsWith(fileList[i], "t0") && endsWith(fileList[i], ".klb")) {
+		if (startsWith(fileList[i], "t0") && ( endsWith(fileList[i], ".klb") || endsWith(fileList[i], ".tif") ) {
 
 			//now, remove .klb from end of filename
 			/*name_ext = split(fileList[i],".");
@@ -2514,14 +2515,14 @@ function main_klb_to_mip(directory) {
 	do_anaglyph_oblique_proj_2 = true;
 	do_anaglyph_oblique_proj_2 = true;
 	default_degree_separation = 5;
-	Dialog.create("KLB processing settings...");
+	Dialog.create("KLB/TIF processing settings...");
 	Dialog.setInsets(0,0,0);
-	Dialog.addMessage("KLB z-MIP settings...",16,"Black");
+	Dialog.addMessage("z-MIP settings...",16,"Black");
 	Dialog.addCheckbox("Do full z-MIPs", do_full_zmip);
 	Dialog.addCheckbox("Do two halves z-MIPs", do_half_zmips);
 	Dialog.addCheckbox("Determine z-halfway from image features", intellegent_halfway_finder);
 	Dialog.setInsets(0,0,0);
-	Dialog.addMessage("KLB oblique MIP settings...",16,"Black");
+	Dialog.addMessage("Oblique MIP settings...",16,"Black");
 	Dialog.addCheckbox("Subtract mean projection for cleanup", oblique_proj_mean_cleanup);
 	Dialog.addCheckbox("Do oblique MIP #1 (y-axis)", do_oblique_proj_1);	
 	Dialog.addNumber("Oblique MIP #1 angle:", oblique_proj_angle_1);
@@ -2530,13 +2531,13 @@ function main_klb_to_mip(directory) {
 	Dialog.addCheckbox("Do oblique MIP #3 (x-axis)", do_oblique_proj_3);	
 	Dialog.addNumber("Oblique MIP #3 angle:", oblique_proj_angle_3);	
 	Dialog.setInsets(0,0,0);
-	Dialog.addMessage("KLB anaglyph settings...",16,"Black");
+	Dialog.addMessage("Anaglyph settings...",16,"Black");
 	Dialog.addCheckbox("Do full z-anaglyph", do_anaglyph);	
 	Dialog.addCheckbox("Do oblique anaglyph #1 (as above)", do_anaglyph_oblique_proj_1);	
 	Dialog.addCheckbox("Do oblique anaglyph #2 (as above)", do_anaglyph_oblique_proj_2);	
 	Dialog.addCheckbox("Do oblique anaglyph #3 (as above)", do_anaglyph_oblique_proj_2);		
 	Dialog.setInsets(0,0,0);
-	Dialog.addMessage("KLB custom partial MIP settings...",16,"Black");
+	Dialog.addMessage("Custom partial MIP settings...",16,"Black");
     Dialog.addString("Partial z-MIP #1 (slice range):", "###-###", 7);
     Dialog.addString("Partial z-MIP #2 (slice range):", "###-###", 7);
 
@@ -2648,19 +2649,30 @@ function main_klb_to_mip(directory) {
 		projection_options = "projection=[Brightest Point]";
 		intelligent_mid_slice = 0; // used for half z-MIPs		
 		if ( do_anaglyph || do_anaglyph_oblique_proj_1 || do_anaglyph_oblique_proj_2 || do_anaglyph_oblique_proj_3 || intellegent_halfway_finder ) {
-			setBatchMode(false); //KLB does not work with batch mode
+			
 			
 			//open an image in the middle of time series
-			run("KLB...", "open=[" + directory + processList[floor(processList.length/2)] + ".klb]");
-			VirtStack = getImageID();//("window.title");
+			file_to_open = directory + processList[floor(processList.length/2)];
+			if ( File.exists(file_to_open + ".klb") )  {
+				setBatchMode(false); //KLB does not work with batch mode
+				run("KLB...", "open=[" + file_to_open + ".klb]");
+				VirtStack = getImageID();//("window.title");
 			
-			setBatchMode(true);
-			selectImage(VirtStack);
-			run("Duplicate...", "duplicate");
-			OrigStack = getTitle();//("window.title");
-			selectImage(VirtStack);
-			close();
-			selectImage(OrigStack);
+				setBatchMode(true);
+				selectImage(VirtStack);
+				run("Duplicate...", "duplicate");
+				OrigStack = getTitle();
+				selectImage(VirtStack);
+				close();
+				selectImage(OrigStack);
+			} else if ( File.exists(file_to_open + ".tif") ) {
+				open( file_to_open + ".tif" );
+				OrigStack = getTitle();
+				setBatchMode(true);
+			} else {
+				print( "Cannot find file " + file_to_open + " with extension .klb or .tif" + "!" );
+				return;	
+			}
 			
 			//run("Reslice [/]...", "output=2.000 start=Top rotate avoid"); //get ready to find Z center of mass, first reslice
 			getDimensions(dim_width, dim_height, dim_channels, dim_slices, dim_frames);
@@ -2724,18 +2736,26 @@ function main_klb_to_mip(directory) {
 		call("java.lang.System.gc");		
 		
 		for (i=0; i<processList.length; i++) {
-			setBatchMode(false); //KLB does not work with batch mode
+			file_to_open = directory + processList[i];
+			if ( File.exists(file_to_open + ".klb") )  {
+				setBatchMode(false); //KLB does not work with batch mode
+				run("KLB...", "open=[" + file_to_open + ".klb]");
+				VirtStack = getImageID();//("window.title");
 			
-			run("KLB...", "open=[" + directory + processList[i] + ".klb]");
-			VirtStack = getImageID();//("window.title");
-			
-			setBatchMode(true);
-			selectImage(VirtStack);
-			run("Duplicate...", "duplicate");
-			OrigStack = getImageID();//("window.title");
-			selectImage(VirtStack);
-			close();
-			
+				setBatchMode(true);
+				selectImage(VirtStack);
+				run("Duplicate...", "duplicate");
+				OrigStack = getTitle();//("window.title");
+				selectImage(VirtStack);
+				close();
+				selectImage(OrigStack);
+			} else if ( File.exists(file_to_open + ".tif") ) {
+				open( file_to_open + ".tif" );
+				setBatchMode(true);
+			} else {
+				print( "Cannot find file " + file_to_open + " with extension .klb or .tif" + "!" );
+				return;	
+			}
 			
 			//set up units
 			selectImage(OrigStack);
@@ -2836,6 +2856,15 @@ function main_klb_to_mip(directory) {
 				close(); 
 			
 				selectImage(OrigStack);
+			}
+			
+			bits = bitDepth();                  
+			if ( bitDepth == 8 ) {
+				//do nothing, already 8-bit
+			} else {
+				//run("Gamma...", "value=0.75 stack");
+				//run("Enhance Contrast...", "saturated=0.001 normalize process_all use");                  
+				run("8-bit");
 			}
 			
 			//oblique MIPs
@@ -3172,7 +3201,7 @@ function main_tifseries_16bit_to_8bit(folder_in_batch,directory,outputDirectory)
 			setMinAndMax(min,max);
 			run("Apply LUT", "stack");
 			//run("Enhance Contrast...", "process_all use");
-			run("Gamma...", "value=0.75 stack");
+			run("Gamma...", "value=" + d2s(user_filter_gamma,4) + " stack");
 			
 			if ( convert_to_8_bit ) {
 				run("8-bit");
@@ -3612,7 +3641,7 @@ function main_stacks_to_partial_collapse (directory,collapse_Z_size_micron,overl
 	//process_view_list = newArray(0);
 	
 	for (i=0; i<fileList.length; i++) {
-		if ((startsWith(fileList[i], "LSFM_") || startsWith(fileList[i], "t000")) && endsWith(fileList[i], ".tif")) {
+		if ((startsWith(fileList[i], "LSFM_") || startsWith(fileList[i], "t0")) && endsWith(fileList[i], ".tif")) {
 
 			//now, remove .tif from end of filename
 			/*name_ext = split(fileList[i],".");
@@ -3640,7 +3669,7 @@ function main_stacks_to_partial_collapse (directory,collapse_Z_size_micron,overl
 			if (startsWith(fileList[i], "LSFM__")) { //output for large stack deconvolution runs contains __
 				name_ext = split(filepaddedname,"(__)");
 				this_view = name_ext[2] + "_" + name_ext[3];
-			} else if (startsWith(fileList[i], "t000")) {
+			} else if (startsWith(fileList[i], "t0")) {
 				this_view = name_ext[1];
 			} else {
 				this_view = name_ext[2] + "_" + name_ext[3];
@@ -3801,9 +3830,9 @@ function main_stacks_to_partial_collapse (directory,collapse_Z_size_micron,overl
 					selectImage(VirtStack);
 					close();
 				} else {
-					setBatchMode(false); //KLB does not work with batch mode
 					open(processList[i]);
 					OrigStack = getTitle();
+					setBatchMode(true);
 				}
 				//OrigStack = getInfo("window.title");
 				
@@ -3863,7 +3892,7 @@ function main_extract_defined_slices(directory) {
 	Array.sort(fileList); //very critical step, can be done here or done to array processList below
 	
 	for (i=0; i<fileList.length; i++) {
-		if ((startsWith(fileList[i], "LSFM_") || startsWith(fileList[i], "t000")) && endsWith(fileList[i], ".tif")) {
+		if ((startsWith(fileList[i], "LSFM_") || startsWith(fileList[i], "t00")) && endsWith(fileList[i], ".tif")) {
 
 			//now, remove .tif from end of filename
 			/*name_ext = split(fileList[i],".");
@@ -3883,7 +3912,7 @@ function main_extract_defined_slices(directory) {
 			if (startsWith(fileList[i], "LSFM__")) { //output for large stack deconvolution runs contains __
 				name_ext = split(filepaddedname,"(__)");
 				this_view = name_ext[2] + "_" + name_ext[3];
-			} else if (startsWith(fileList[i], "t000")) {
+			} else if (startsWith(fileList[i], "t00")) {
 				this_view = name_ext[1];
 			} else {
 				this_view = name_ext[2] + "_" + name_ext[3];
@@ -4057,9 +4086,9 @@ function main_extract_defined_slices(directory) {
 					selectImage(VirtStack);
 					close();
 				} else {
-					setBatchMode(false); //KLB does not work with batch mode
 					open(processList[i]);
 					OrigStack = getTitle();
+					setBatchMode(true);
 				}
 			
 			
@@ -4367,6 +4396,7 @@ macro "0. Change LSFM processing settings..." {
 	Dialog.addCheckbox("Minimal-loss 8-bit conversion (single image and time series)", convert_to_8_bit);
 	Dialog.addNumber("Element radius (px) for background subtraction (time series):", rolling_ball_radius);
 	Dialog.addNumber("Element radius (px) for background subtraction (single):", fixed_rolling_ball_radius);
+	Dialog.addNumber("Gamma adjustment (0-1, lower = brighter):", user_filter_gamma);
 	
 	Dialog.addCheckbox("Bright precipitate removal (single image only)", fixed_precipitate_removal);	
 	Dialog.addCheckbox("Bright blob removal (single image only)", fixed_blob_removal);	
@@ -4384,6 +4414,8 @@ macro "0. Change LSFM processing settings..." {
 	convert_to_8_bit = Dialog.getCheckbox();
 	rolling_ball_radius = Dialog.getNumber();
 	fixed_rolling_ball_radius = Dialog.getNumber();
+	user_filter_gamma = Dialog.getNumber();
+	
 	fixed_precipitate_removal = Dialog.getCheckbox();	
 	fixed_blob_removal = Dialog.getCheckbox();	
 }
@@ -4417,7 +4449,7 @@ macro "2. Filter LSFM .tif files (single file)..." {
 	setBatchMode("exit and display");
 	print("DONE: Convert and filter LSFM .tif files to 8-bit (single file).");
 }
-macro "3. BigStitcher (PLEASE split fused h5/xml images to 1 timepoint and 1 setup per partition)..." {
+macro "3. BigStitcher..." {
 	run("BigStitcher");
 }
 macro "3. Convert LSFM .tif time series to z-MIP anaglyphs (folder in batch)..." {
@@ -4430,37 +4462,11 @@ macro "3. Convert LSFM .tif files to z-MIPs (folder in batch)..." {
 	setBatchMode("exit and display");
 	print("DONE: Convert LSFM .tif files to z-MIPs (folder in batch).");
 }
-macro "3. Convert .tif (folder in batch) to AVIs..." {
-	directory = getDirectory("Choose input directory");
-	fileList = getFileList(directory);
-	fr = getNumber("Framerate (fps):", 12);
-	File.makeDirectory(directory + file_sep + "AVIs");
-	setBatchMode(true);
-	for (i=0; i<fileList.length; i++) {
-		if ( endsWith(fileList[i], ".tif") ) {
-			//now, remove .tif from end of filename
-			name_ext = split(fileList[i],".");
-			if (  endsWith(fileList[i], ".c.tif") ) {
-				name_ext = split(fileList[i],"(\\.c\\.)");
-			}
-			filepaddedname = "";
-			for (n=0; n<name_ext.length-1; n++) {
-				filepaddedname += name_ext[n];
-			}
-			
-			open( directory + file_sep + fileList[i] );
-			run("AVI... ", "compression=PNG frame="+d2s(fr,0)+" save=["+directory+file_sep + "AVIs"+file_sep+filepaddedname+".avi]");
-			close();
-		}
-	}
-	setBatchMode("exit and display");
-	print("DONE: Convert .tif (folder in batch) to AVIs.");
-}
-macro "4. Convert fused .h5 to .klb (folder in batch, requires h5/xml split to 1 timepoint and 1 setup per partition)..." {
+macro "4. Convert fused .h5 to .tif (folder in batch)..." {
 	directory = getDirectory("Choose h5/xml input directory");
 	
-	if ( !File.exists(path_dataset_folder_export_all_h5_to_klb_pyklb) ) {
-		path_dataset_folder_export_all_h5_to_klb_pyklb = File.openDialog("Please locate python script: dataset_folder_export_all_h5_to_klb_pyklb.py");
+	if ( !File.exists(path_dataset_folder_export_all_h5_to_tif_pyklb) ) {
+		path_dataset_folder_export_all_h5_to_tif_pyklb = File.openDialog("Please locate python script: dataset_folder_export_all_h5_to_TIFs_scikit-image.py");
 	}
 	
 	Dialog.create("Choose bitdepth...");
@@ -4469,31 +4475,27 @@ macro "4. Convert fused .h5 to .klb (folder in batch, requires h5/xml split to 1
 	
 	outbits = "16";
 	outbits = Dialog.getChoice();
-	print( "calling: python3 " + path_dataset_folder_export_all_h5_to_klb_pyklb + " " + directory + " " + outbits );
-	//exec("python3 " + path_dataset_folder_export_all_h5_to_klb_pyklb); //,directory,outbits);	
-	exec("python3", path_dataset_folder_export_all_h5_to_klb_pyklb, directory, outbits);
+	print( "calling: python3 " + path_dataset_folder_export_all_h5_to_tif_pyklb + " " + directory + " " + outbits );
+	//exec("python3 " + path_dataset_folder_export_all_h5_to_tif_pyklb); //,directory,outbits);	
+	exec("python3", path_dataset_folder_export_all_h5_to_tif_pyklb, directory, outbits);
 	print("DONE: Convert fused .h5 to .klb (folder in batch).");
 }
-macro "5. Create .klb BigDataViewer dataset.xml file..." {
-	run("Open KLB");
-	//print("DONE: Create .klb BigDataViewer dataset.xml file.");
-}
-macro "5. Convert t0XXXX .klb files to anaglyphs or MIPs (folder in batch)..." {
-	main_klb_to_mip("");
-	setBatchMode("exit and display");
-	print("DONE: Convert t0XXXX .klb files to anaglyphs or MIPs (folder in batch).");
-}
-macro "5. Convert LSFM .tif or t0XXXX .klb files to partially collapsed Z-stacks..." {
-	main_stacks_to_partial_collapse("","","");
-	setBatchMode("exit and display");
-	print("DONE: Convert LSFM .tif or t0XXXX .klb files to partially collapsed Z-stacks.");
-}
-macro "6. Extract defined slice(s) from LSFM .tif or t0XXXX .klb files in time series..." {
+macro "5. Extract defined slice(s) from LSFM .tif or t0XXXX .klb/.tif files in time series..." {
 	main_extract_defined_slices ("");
 	setBatchMode("exit and display");
-	print("DONE: Extract defined slice(s) from LSFM .tif or t0XXXX .klb files in time series.");
+	print("DONE: Extract defined slice(s) from LSFM .tif or t0XXXX .klb/.tif files in time series.");
 }
-macro "7. Process t0XXXX MIPs (folder in batch) to AVIs..." {
+macro "5. Convert t0XXXX .klb/.tif files to anaglyphs or MIPs (folder in batch)..." {
+	main_klb_to_mip("");
+	setBatchMode("exit and display");
+	print("DONE: Convert t0XXXX .klb/.tif files to anaglyphs or MIPs (folder in batch).");
+}
+macro "5. Convert LSFM .tif or t0XXXX .klb/.tif files to partially collapsed Z-stacks..." {
+	main_stacks_to_partial_collapse("","","");
+	setBatchMode("exit and display");
+	print("DONE: Convert LSFM .tif or t0XXXX .klb/.tif files to partially collapsed Z-stacks.");
+}
+macro "6. Process t0XXXX MIPs (folder in batch) to AVIs..." {
 	main_mip_to_avi();	
 	setBatchMode("exit and display");
 	print("DONE: Process t0XXXX MIPs (folder in batch) to AVIs.");
@@ -4620,4 +4622,30 @@ macro "Macro: Set Display Range..." {
 	min = getNumber("Min:", min);
 	max = getNumber("Max:", max);
 	setMinAndMax(min, max);
+}
+macro "Macro: Convert .tif (folder in batch) to AVIs..." {
+	directory = getDirectory("Choose input directory");
+	fileList = getFileList(directory);
+	fr = getNumber("Framerate (fps):", 12);
+	File.makeDirectory(directory + file_sep + "AVIs");
+	setBatchMode(true);
+	for (i=0; i<fileList.length; i++) {
+		if ( endsWith(fileList[i], ".tif") ) {
+			//now, remove .tif from end of filename
+			name_ext = split(fileList[i],".");
+			if (  endsWith(fileList[i], ".c.tif") ) {
+				name_ext = split(fileList[i],"(\\.c\\.)");
+			}
+			filepaddedname = "";
+			for (n=0; n<name_ext.length-1; n++) {
+				filepaddedname += name_ext[n];
+			}
+			
+			open( directory + file_sep + fileList[i] );
+			run("AVI... ", "compression=PNG frame="+d2s(fr,0)+" save=["+directory+file_sep + "AVIs"+file_sep+filepaddedname+".avi]");
+			close();
+		}
+	}
+	setBatchMode("exit and display");
+	print("DONE: Convert .tif (folder in batch) to AVIs.");
 }

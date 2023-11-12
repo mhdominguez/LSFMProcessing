@@ -22,13 +22,11 @@ if len(sys.argv) > 1:
 	if os.path.exists(os.path.dirname(sys.argv[1])):
 		os.chdir(sys.argv[1])
 	elif sys.argv[1].startswith("8") or ( len(sys.argv) > 2 and sys.argv[2].startswith("8") ):
-		bits = "8"
+		outbits = "8"
 
 for root, dirs, files in os.walk("."):
 	for filename in files:
 		if re.search("\d\.h5",filename): #( filename.endswith("00.h5") or filename.endswith("01.h5") ):
-			#print(filename)
-			#print "Please note that renaming rules are coded in this python script; please modify script to change rules for renaming if desired!"
 			file_to_modify = filename
 			print( "Exporting TIFs from file", file_to_modify)
 			
@@ -40,12 +38,10 @@ for root, dirs, files in os.walk("."):
 			last_group = f["/"+last_group_name+"/"]
 			
 			subgroup_names = last_group.keys()
-			#print "Subgroups: ", subgroup_names
 			
 			for this_name in list(subgroup_names):
 				print( " subgroup:", this_name)
 				image = np.array(f["/"+last_group_name+"/"+this_name+"/0/cells"]).astype("uint"+outbits)
-				tp.imsave(last_group_name + "_" + this_name + ".tif", image)
-				#fi.write_multipage(image, last_group_name + "_" + this_name + ".tif")
-				
+				tp.imsave(last_group_name + "_" + this_name + ".tif", image,compress=6)
+				#tp.imsave(last_group_name + "_" + this_name + ".tif", image)
 			f.close()
