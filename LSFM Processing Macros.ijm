@@ -2751,6 +2751,7 @@ function main_klb_to_mip(directory) {
 				selectImage(OrigStack);
 			} else if ( File.exists(file_to_open + ".tif") ) {
 				open( file_to_open + ".tif" );
+				OrigStack = getTitle();//("window.title");
 				setBatchMode(true);
 			} else {
 				print( "Cannot find file " + file_to_open + " with extension .klb or .tif" + "!" );
