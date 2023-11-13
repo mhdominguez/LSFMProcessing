@@ -26,22 +26,36 @@ if len(sys.argv) > 1:
 
 for root, dirs, files in os.walk("."):
 	for filename in files:
-		if re.search("\d\.h5",filename): #( filename.endswith("00.h5") or filename.endswith("01.h5") ):
+		if re.search("\.h5",filename): #( filename.endswith("00.h5") or filename.endswith("01.h5") ):
 			file_to_modify = filename
 			print( "Exporting TIFs from file", file_to_modify)
 			
 			f = h5py.File(file_to_modify, "r")
 			
 			group_names = f.keys()
-			last_group_name = list(group_names)[len(group_names)-1]
-			print( "Working on group:", last_group_name)
-			last_group = f["/"+last_group_name+"/"]
-			
-			subgroup_names = last_group.keys()
-			
-			for this_name in list(subgroup_names):
-				print( " subgroup:", this_name)
-				image = np.array(f["/"+last_group_name+"/"+this_name+"/0/cells"]).astype("uint"+outbits)
-				tp.imsave(last_group_name + "_" + this_name + ".tif", image,compress=6)
-				#tp.imsave(last_group_name + "_" + this_name + ".tif", image)
-			f.close()
+
+			for this_group in list(group_names):
+				if not this_group.startswith('t0'):
+					continue  # Skip to the next iteration if the group name does not start with 't0'
+				print( "Working on group:", this_group)
+				subgroup_names = this_group.keys()
+				for this_name in list(subgroup_names):
+					print( " subgroup:", this_name)
+					#image = np.array(f["/"+last_group_name+"/"+this_name+"/0/cells"]).astype("uint"+outbits)
+					#tp.imsave(last_group_name + "_" + this_name + ".tif", image,compression='zlib', imagej=True)
+
+					tif_filename = last_group_name + "_" + this_name + ".tif"
+
+					# Check if the TIFF file already exists
+					if os.path.exists(tif_filename):
+						print(f"Skipping, TIFF file already exists: {tif_filename}")
+						continue  # Skip to the next iteration
+
+					#print(" subgroup:", this_name)
+					image = np.array(f["/"+last_group_name+"/"+this_name+"/0/cells"]).astype("uint"+outbits)
+					#image = np.array(f["/" + last_group_name + "/" + this_name + "/0/cells"]).astype("uint" + outbits)
+					tp.imsave(tif_filename, image, compression='zlib', imagej=True)
+
+
+
+				f.close()
