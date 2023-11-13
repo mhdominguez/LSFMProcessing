@@ -34,26 +34,23 @@ for root, dirs, files in os.walk("."):
 			
 			group_names = f.keys()
 
-			for this_group in list(group_names):
-				if not this_group.startswith('t0'):
+			for this_group_name in list(group_names):
+				if not this_group_name.startswith('t0'):
 					continue  # Skip to the next iteration if the group name does not start with 't0'
-				print( "Working on group:", this_group)
+				print( "Working on group:", this_group_name)
+				this_group = f["/"+this_group_name+"/"]
 				subgroup_names = this_group.keys()
 				for this_name in list(subgroup_names):
 					print( " subgroup:", this_name)
-					#image = np.array(f["/"+last_group_name+"/"+this_name+"/0/cells"]).astype("uint"+outbits)
-					#tp.imsave(last_group_name + "_" + this_name + ".tif", image,compression='zlib', imagej=True)
 
-					tif_filename = last_group_name + "_" + this_name + ".tif"
+					tif_filename = this_group_name + "_" + this_name + ".tif"
 
 					# Check if the TIFF file already exists
 					if os.path.exists(tif_filename):
 						print(f"Skipping, TIFF file already exists: {tif_filename}")
 						continue  # Skip to the next iteration
 
-					#print(" subgroup:", this_name)
-					image = np.array(f["/"+last_group_name+"/"+this_name+"/0/cells"]).astype("uint"+outbits)
-					#image = np.array(f["/" + last_group_name + "/" + this_name + "/0/cells"]).astype("uint" + outbits)
+					image = np.array(f["/"+this_group_name+"/"+this_name+"/0/cells"]).astype("uint"+outbits)
 					tp.imsave(tif_filename, image, compression='zlib', imagej=True)
 
 
