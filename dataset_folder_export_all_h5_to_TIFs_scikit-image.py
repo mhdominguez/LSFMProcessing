@@ -38,8 +38,7 @@ for root, dirs, files in os.walk("."):
 				if not this_group_name.startswith('t0'):
 					continue  # Skip to the next iteration if the group name does not start with 't0'
 				print( "Working on group:", this_group_name)
-				this_group = f["/"+this_group_name+"/"]
-				subgroup_names = this_group.keys()
+				subgroup_names = f["/"+this_group_name+"/"].keys()
 				for this_name in list(subgroup_names):
 					print( " subgroup:", this_name)
 
@@ -53,6 +52,4 @@ for root, dirs, files in os.walk("."):
 					image = np.array(f["/"+this_group_name+"/"+this_name+"/0/cells"]).astype("uint"+outbits)
 					tp.imsave(tif_filename, image, compression='zlib', imagej=True)
 
-
-
-				f.close()
+			f.close()
