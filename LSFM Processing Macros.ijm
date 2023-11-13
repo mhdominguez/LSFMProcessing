@@ -2859,7 +2859,7 @@ function main_klb_to_mip(directory) {
 				selectImage(OrigStack);
 			}
 			
-			bits = bitDepth();                  
+			bits = bitDepth();
 			if ( bitDepth == 8 ) {
 				//do nothing, already 8-bit
 			} else {
