@@ -2460,7 +2460,7 @@ function main_klb_to_mip(directory) {
 	Array.sort(fileList); //very critical step, can be done here or done to array processList below
 	
 	for (i=0; i<fileList.length; i++) {
-		if (startsWith(fileList[i], "t0") && ( endsWith(fileList[i], ".klb") || endsWith(fileList[i], ".tif") ) {
+		if (startsWith(fileList[i], "t0") && ( endsWith(fileList[i], ".klb") || endsWith(fileList[i], ".tif") ) ) {
 
 			//now, remove .klb from end of filename
 			/*name_ext = split(fileList[i],".");
