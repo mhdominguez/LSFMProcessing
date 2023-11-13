@@ -26,5 +26,3 @@ Then, use `Plugins->Macros->0. Change LSFM Processing Settings` to adjust user s
 ## BigDataViewer dataset format conversion scripts
  convert an entire 8-bit H5 dataset to TIF, excluding dataset.xml:<br>
   usage: `python3 dataset_folder_export_all_h5_to_TIFs_scikit-image.py [optional path/to/dataset] 16`, 16 can be replaced with 8 for 8-bit<br><br>
- convert an entire 8-bit H5 dataset to KLB, excluding dataset.xml (needs to be done manually with BigDataViewer KLB import):<br>
-  usage: `python3 dataset_folder_export_all_h5_to_klb_pyklb.py [optional path/to/dataset] 8`, 8 can be replaced with 16 for 16-bit<br><br>
