@@ -50,6 +50,6 @@ for root, dirs, files in os.walk("."):
 						continue  # Skip to the next iteration
 
 					image = np.array(f["/"+this_group_name+"/"+this_name+"/0/cells"]).astype("uint"+outbits)
-					tp.imsave(tif_filename, image, compression='zlib', imagej=True)
+					tp.imsave(tif_filename, image, compression='zlib')
 
 			f.close()
