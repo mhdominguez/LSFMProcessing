@@ -14,7 +14,7 @@ A collection of methods for deconvolving, filtering, and rendering LSFM images. 
   - download plugin binary zip file and copy all *.jar files to plugins folder
   - delete file jars/jtransforms-2.4.jar before using deconvolution
 * h5py and scikit-image installed on system for h5/tif functions
-  - on Ubuntu, can use `sudo pip3 install h5py scikit-image` at console to install
+  - on Ubuntu, can use `sudo pip3 install h5py scikit-image imagecodecs` at console to install
 
 Use `Plugins->Macros->Install` to add `LSFM Processing Macros.ijm` to the macrons menu in Fiji.<br>
 Then, use `Plugins->Macros->0. Change LSFM Processing Settings` to adjust user settings, including filter parameters and deconvolution block size.<br>

@@ -14,7 +14,7 @@
 //       - download plugin binary zip file and copy all *.jar files to plugins folder
 //       - delete file jars/jtransforms-2.4.jar before using deconvolution
 //     h5py and scikit-image installed separately
-//       - on Ubuntu, can use "sudo pip3 install h5py scikit-image" at console to install
+//       - on Ubuntu, can use "sudo pip3 install h5py scikit-image imagecodecs" at console to install
 
 function show_instructions () {
 	Dialog.create("LSFM processing install info/instructions...");
@@ -34,7 +34,7 @@ function show_instructions () {
     Dialog.addMessage("       - unzip and copy all *.jar files to Fiji plugins folder",12,"Black");
     Dialog.addMessage("       - delete file jtransforms-2.4.jar in Fiji jars folder before using deconvolution",12,"Black");
     #Dialog.addMessage("   h5py and scikit-image installed on system",14,"Black");
-    Dialog.addMessage("       - on Ubuntu, can use \"sudo pip3 install h5py scikit-image\" at console to install",12,"Black");
+    Dialog.addMessage("       - on Ubuntu, can use \"sudo pip3 install h5py scikit-image imagecodecs\" at console to install",12,"Black");
 	Dialog.show();
 }
 
