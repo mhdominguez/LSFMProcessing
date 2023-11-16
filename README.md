@@ -15,6 +15,14 @@ A collection of methods for deconvolving, filtering, and rendering LSFM images. 
   - delete file jars/jtransforms-2.4.jar before using deconvolution
 * h5py and scikit-image installed on system for h5/tif functions
   - on Ubuntu, can use `sudo pip3 install h5py scikit-image imagecodecs` at console to install
+* pyklb installed on system for klb functions
+  - on Ubuntu, can use console to install...
+```
+git clone https://github.com/bhoeckendorf/pyklb
+cd pyklb
+python3 setup.py build
+sudo python3 setup.py install` at console to install
+```
 
 Use `Plugins->Macros->Install` to add `LSFM Processing Macros.ijm` to the macrons menu in Fiji.<br>
 Then, use `Plugins->Macros->0. Change LSFM Processing Settings` to adjust user settings, including filter parameters and deconvolution block size.<br>
@@ -24,5 +32,7 @@ Then, use `Plugins->Macros->0. Change LSFM Processing Settings` to adjust user s
  usage: `perl dataset_folder_copy_view_transformations.pl`
 <br><br>
 ## BigDataViewer dataset format conversion scripts
- convert an entire 8-bit H5 dataset to TIF, excluding dataset.xml:<br>
-  usage: `python3 dataset_folder_export_all_h5_to_TIFs_scikit-image.py [optional path/to/dataset] 16`, 16 can be replaced with 8 for 8-bit<br><br>
+ convert an entire H5 dataset to TIF, excluding dataset.xml:<br>
+  usage: `python3 dataset_folder_export_all_h5_to_tif_scikit-image.py [optional path/to/dataset] 16`, 16 can be replaced with 8 for 8-bit<br><br>
+ convert an entire H5 dataset to KLB, excluding dataset.xml:<br>
+  usage: `python3 dataset_folder_export_all_h5_to_klb_pyklb.py [optional path/to/dataset] 16`, 16 can be replaced with 8 for 8-bit<br><br>
