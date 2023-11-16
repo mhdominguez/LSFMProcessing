@@ -2869,7 +2869,8 @@ function main_klb_to_mip(directory) {
 				//do nothing, already 8-bit
 			} else {
 				//run("Gamma...", "value=0.75 stack");
-				//run("Enhance Contrast...", "saturated=0.001 normalize process_all use");                  
+				//run("Enhance Contrast...", "saturated=0.001 normalize process_all use");
+				setMinAndMax(0, 65535);
 				run("8-bit");
 			}
 			
