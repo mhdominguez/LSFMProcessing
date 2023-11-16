@@ -13,8 +13,10 @@
 //     Parallel Iterative Deconvolution 1.12 (if using iterative deconvolution, https://sites.google.com/site/piotrwendykier/software/deconvolution/paralleliterativedeconvolution)
 //       - download plugin binary zip file and copy all *.jar files to plugins folder
 //       - delete file jars/jtransforms-2.4.jar before using deconvolution
-//     h5py and scikit-image installed separately
-//       - on Ubuntu, can use "sudo pip3 install h5py scikit-image imagecodecs" at console to install
+//     h5py and scikit-image installed
+//       - on Ubuntu, can use "sudo pip3 install h5py scikit-image" at console to install
+//     pyklb installed
+//       - on Ubuntu, can use "git clone https://github.com/bhoeckendorf/pyklb; cd pyklb; python3 setup.py build; sudo python3 setup.py install" at console to install
 
 function show_instructions () {
 	Dialog.create("LSFM processing install info/instructions...");
@@ -33,8 +35,10 @@ function show_instructions () {
     Dialog.addMessage("       - download plugin binary zip file (https://sites.google.com/site/piotrwendykier/software/deconvolution/paralleliterativedeconvolution)",12,"Black");
     Dialog.addMessage("       - unzip and copy all *.jar files to Fiji plugins folder",12,"Black");
     Dialog.addMessage("       - delete file jtransforms-2.4.jar in Fiji jars folder before using deconvolution",12,"Black");
-    #Dialog.addMessage("   h5py and scikit-image installed on system",14,"Black");
-    Dialog.addMessage("       - on Ubuntu, can use \"sudo pip3 install h5py scikit-image imagecodecs\" at console to install",12,"Black");
+    Dialog.addMessage("   h5py and scikit-image installed on system",14,"Black");
+    Dialog.addMessage("       - on Ubuntu, can use \"sudo pip3 install h5py scikit-image\" at console to install",12,"Black");
+    Dialog.addMessage("   pyklb installed on system",14,"Black");
+    Dialog.addMessage("       - on Ubuntu, can use \"git clone https://github.com/bhoeckendorf/pyklb; cd pyklb; python3 setup.py build; sudo python3 setup.py install\" at console to install",12,"Black");
 	Dialog.show();
 }
 
@@ -51,7 +55,8 @@ var deconvolution_iterations = 0;
 var deconvolution_subtract_camera_noise = false;
 var deconvolve_yes = true;
 var detection_NA_penalty = 10;
-var path_dataset_folder_export_all_h5_to_tif_pyklb = "dataset_folder_export_all_h5_to_TIFs_scikit-image.py";
+var path_dataset_folder_export_all_h5_to_tif = "dataset_folder_export_all_h5_to_tif_scikit-image.py";
+var path_dataset_folder_export_all_h5_to_klb = "dataset_folder_export_all_h5_to_klb_pyklb.py";
 var user_filter_gamma = 0.75;
 
 var default_tissue_refractive_index = 1.4;
@@ -4466,8 +4471,8 @@ macro "3. Convert LSFM .tif files to z-MIPs (folder in batch)..." {
 macro "4. Convert fused .h5 to .tif (folder in batch)..." {
 	directory = getDirectory("Choose h5/xml input directory");
 	
-	if ( !File.exists(path_dataset_folder_export_all_h5_to_tif_pyklb) ) {
-		path_dataset_folder_export_all_h5_to_tif_pyklb = File.openDialog("Please locate python script: dataset_folder_export_all_h5_to_TIFs_scikit-image.py");
+	if ( !File.exists(path_dataset_folder_export_all_h5_to_tif) ) {
+		path_dataset_folder_export_all_h5_to_tif = File.openDialog("Please locate python script: dataset_folder_export_all_h5_to_tif_scikit-image.py");
 	}
 	
 	Dialog.create("Choose bitdepth...");
@@ -4476,9 +4481,27 @@ macro "4. Convert fused .h5 to .tif (folder in batch)..." {
 	
 	outbits = "16";
 	outbits = Dialog.getChoice();
-	print( "calling: python3 " + path_dataset_folder_export_all_h5_to_tif_pyklb + " " + directory + " " + outbits );
-	//exec("python3 " + path_dataset_folder_export_all_h5_to_tif_pyklb); //,directory,outbits);	
-	exec("python3", path_dataset_folder_export_all_h5_to_tif_pyklb, directory, outbits);
+	print( "calling: python3 " + path_dataset_folder_export_all_h5_to_tif + " " + directory + " " + outbits );
+	//exec("python3 " + path_dataset_folder_export_all_h5_to_tif); //,directory,outbits);
+	exec("python3", path_dataset_folder_export_all_h5_to_tif, directory, outbits);
+	print("DONE: Convert fused .h5 to .tif (folder in batch).");
+}
+macro "4. Convert fused .h5 to .klb (folder in batch)..." {
+	directory = getDirectory("Choose h5/xml input directory");
+
+	if ( !File.exists(path_dataset_folder_export_all_h5_to_klb) ) {
+		path_dataset_folder_export_all_h5_to_klb = File.openDialog("Please locate python script: dataset_folder_export_all_h5_to_klb_pyklb.py");
+	}
+
+	Dialog.create("Choose bitdepth...");
+	Dialog.addChoice("Bits per pixel:",newArray("8","16"), "16")
+	Dialog.show();
+
+	outbits = "16";
+	outbits = Dialog.getChoice();
+	print( "calling: python3 " + path_dataset_folder_export_all_h5_to_klb + " " + directory + " " + outbits );
+	//exec("python3 " + path_dataset_folder_export_all_h5_to_klb); //,directory,outbits);
+	exec("python3", path_dataset_folder_export_all_h5_to_klb, directory, outbits);
 	print("DONE: Convert fused .h5 to .klb (folder in batch).");
 }
 macro "5. Extract defined slice(s) from LSFM .tif or t0XXXX .klb/.tif files in time series..." {
