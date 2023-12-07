@@ -4674,3 +4674,95 @@ macro "Macro: Convert .tif (folder in batch) to AVIs..." {
 	setBatchMode("exit and display");
 	print("DONE: Convert .tif (folder in batch) to AVIs.");
 }
+macro "Macro: Compare ProcessStack segmentations..." {
+
+	path = File.openDialog("Select an original image file");
+	directory = File.getParent(path);
+	name = File.getName(path);
+
+	// remove .tif or .klb
+	filepaddedname = substring(name, 0, name.length-4);
+
+	// search directory for klb files beginning with same name but with seg_conn as outputted by ProcessStack
+	fileList = newArray(1);
+	fileList[0] = name;
+	fileList_preview = getFileList(directory);
+	for (i=0; i<fileList_preview.length; i++) {
+		if (startsWith(fileList_preview[i], filepaddedname + "_seg_conn" ) && (endsWith(fileList_preview[i], ".klb"))) {
+			fileList = Array.concat(fileList,fileList_preview[i]);
+		}
+	}
+
+	// for each file, allow to select channel color (or none)
+	channel_colors = newArray(fileList.length);
+	Dialog.create("Choose merge color options...");
+	Dialog.addMessage("Choose LUTs for each input segmentation to compare:",16,"Black");
+	for (b=0; b<fileList.length; b++ ) {
+		def_color = "Grays";
+		if ( b == 1 ) { def_color = "Red";} // original file
+	    else if ( b == 2) { def_color = "Green";}
+	    else if ( b == 3) { def_color = "Blue";}
+	    else if ( b > 3) { def_color = "No Show";}
+
+	    Dialog.addChoice(fileList[b] +" LUT:", newArray("Red", "Green", "Blue", "Cyan", "Magenta", "Yellow", "Grays","No Show"),def_color);
+	}
+	Dialog.show();
+	for (b=0; b<fileList.length; b++ ) {
+	    channel_colors[b] = Dialog.getChoice();
+	}
+
+	//now process each channel image
+	channel_counter = 0; //need to know for end, may not match fileList.length
+	merge_text = ""
+	rand_num = d2s(floor(random() * 1000000 ),0);
+	bits = "16-bit";
+	for (b=0; b<fileList.length; b++ ) {
+		if ( channel_colors[b] != "No Show" ) {
+			// open main image
+			if (endsWith( name, ".klb" ) ) {
+				setBatchMode(false); //KLB does not work with batch mode
+				run("KLB...", "open=[" + directory + file_sep + fileList[b] + "]");
+				VirtStack = getImageID();//("window.title");
+		
+				setBatchMode(true);
+				selectImage(VirtStack);
+				run("Duplicate...", "duplicate");
+				OrigStack = getTitle();
+				selectImage(VirtStack);
+				close();
+				selectImage(OrigStack);
+			} else {
+				open(name);
+				OrigStack = getTitle();
+				setBatchMode(true);
+			}
+		
+			run(channel_colors[b]);
+		
+			if ( b == 0 ) { // original image
+				bits = d2s(bitDepth(),0) + "-bit";
+				run("Gamma...", "value=0.80 stack");
+				run("Enhance Contrast...", "saturated=0.001 process_all use");
+			} else { // all others -- need to set range to 0->1 to show all partitions
+				run("Find Edges", "stack");
+				run(bits);
+				setMinAndMax(0, 1);
+				run("Apply LUT", "stack");
+			}
+
+			rename(rand_num + "_ch" + d2s(channel_counter,0) );
+			merge_text += "c"+ d2s(channel_counter+1,0) +"=["+rand_num + "_ch" + d2s(channel_counter,0) +"] ";
+			channel_counter++;
+		}
+	}
+	
+	run("Merge Channels...", merge_text );// "c1=["+channelList[b]+"] c2=["+channelList[b]+"] c3=["+channelList[b]+"]");
+	rename( filepaddedname + " segmentations " + rand_num );	
+	setBatchMode(false); 
+	run("Channels Tool...");
+	
+	print( "DONE: Compare ProcessStack segmentations (" + rand_num + ")." );
+	for (b=0; b<fileList.length; b++ ) {
+		print( "  Channel " + d2s(b+1,0) + ": " + fileList[b] + " -> " + channel_colors[b] );
+	}
+}
