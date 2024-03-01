@@ -7,10 +7,10 @@
 //     BigStitcher, Bio-Formats, SiMView packages installed (checked) in Fiji Update
 //     PSF generator 18.12.2017 (http://bigwww.epfl.ch/algorithms/psfgenerator/)
 //       - download Fiji plugin and place PSF_Generator.jar in plugins folder
-//     Parallel Spectral Deconvolution 1.12 (https://sites.google.com/site/piotrwendykier/software/deconvolution/parallelspectraldeconvolution)
+//     Parallel Spectral Deconvolution 1.12 (https://sourceforge.net/projects/spectraldeconv/files/spectraldeconv/1.12/parallel_spectral_deconvolution-1.12-bin.zip/download)
 //       - download plugin binary zip file and copy all *.jar files to plugins folder
 //       - delete file jars/jtransforms-2.4.jar before using deconvolution
-//     Parallel Iterative Deconvolution 1.12 (if using iterative deconvolution, https://sites.google.com/site/piotrwendykier/software/deconvolution/paralleliterativedeconvolution)
+//     Parallel Iterative Deconvolution 1.12 (if using iterative deconvolution, https://sourceforge.net/projects/iterativedeconv/files/iterativedeconv/1.12/parallel_iterative_deconvolution-1.12-bin.zip/download)
 //       - download plugin binary zip file and copy all *.jar files to plugins folder
 //       - delete file jars/jtransforms-2.4.jar before using deconvolution
 //     h5py and scikit-image installed
@@ -28,11 +28,11 @@ function show_instructions () {
     Dialog.addMessage("       - download Fiji plugin (http://bigwww.epfl.ch/algorithms/psfgenerator/)",12,"Black");
 	Dialog.addMessage("       - place PSF_Generator.jar in Fiji plugins folder",12,"Black");
     Dialog.addMessage("   Parallel Spectral Deconvolution 1.12",14,"Black");
-    Dialog.addMessage("       - download plugin binary zip file (https://sites.google.com/site/piotrwendykier/software/deconvolution/parallelspectraldeconvolution)",12,"Black");
+    Dialog.addMessage("       - download plugin binary zip file (https://sourceforge.net/projects/spectraldeconv/files/spectraldeconv/1.12/parallel_spectral_deconvolution-1.12-bin.zip/download)",12,"Black");
     Dialog.addMessage("       - unzip and copy all *.jar files to Fiji plugins folder",12,"Black");
     Dialog.addMessage("       - delete file jtransforms-2.4.jar in Fiji jars folder before using deconvolution",12,"Black");
     Dialog.addMessage("   Parallel Iterative Deconvolution 1.12 (if using iterative deconvolution)",14,"Black");
-    Dialog.addMessage("       - download plugin binary zip file (https://sites.google.com/site/piotrwendykier/software/deconvolution/paralleliterativedeconvolution)",12,"Black");
+    Dialog.addMessage("       - download plugin binary zip file (https://sourceforge.net/projects/iterativedeconv/files/iterativedeconv/1.12/parallel_iterative_deconvolution-1.12-bin.zip/download)",12,"Black");
     Dialog.addMessage("       - unzip and copy all *.jar files to Fiji plugins folder",12,"Black");
     Dialog.addMessage("       - delete file jtransforms-2.4.jar in Fiji jars folder before using deconvolution",12,"Black");
     Dialog.addMessage("   h5py and scikit-image installed on system",14,"Black");
