@@ -2868,8 +2868,8 @@ function main_klb_to_mip(directory) {
 			if ( bitDepth == 8 ) {
 				//do nothing, already 8-bit
 			} else {
-				//run("Gamma...", "value=0.75 stack");
-				//run("Enhance Contrast...", "saturated=0.001 normalize process_all use");
+				run("Gamma...", "value=0.8 stack");
+				run("Enhance Contrast...", "saturated=0.001 normalize process_all use");
 				setMinAndMax(0, 65535);
 				run("8-bit");
 			}
