@@ -4304,7 +4304,7 @@ function main_mip_to_avi () {
 						type_string = " type=RGB";
 						is_anaglyph = true;
 					}
-					run("Image Sequence...", "dir=["+directory+"]"+type_string+" filter="+chan_setups[ii]+"_"+view_setups[i]+" start="+d2s(min_time,0)+" count="+d2s(max_time-min_time,0)+" sort");
+					run("Image Sequence...", "dir=["+directory+"]"+type_string+" filter="+chan_setups[ii]+"_"+view_setups[i]+" start="+d2s(min_time,0)+" count="+d2s(1+max_time-min_time,0)+" sort");
 					rand_num = d2s( floor(random() * 1000000 ), 0 );
 					rename( "Movie_" + rand_num );
 					run("Animation Options...", "speed="+d2s(AVI_framerate,0) );
