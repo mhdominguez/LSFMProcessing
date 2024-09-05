@@ -9,10 +9,10 @@ A collection of methods for deconvolving, filtering, and rendering LSFM images. 
   - download Fiji plugin and place PSF_Generator.jar in `Fiji.app/plugins` folder
 * [Parallel Spectral Deconvolution](https://sourceforge.net/projects/spectraldeconv/files/spectraldeconv/1.12/parallel_spectral_deconvolution-1.12-bin.zip/download) 1.12
   - download plugin binary zip file and copy all *.jar files to `Fiji.app/plugins` folder
-  - delete file jars/jtransforms-2.4.jar before using deconvolution
+  - delete file `jars/jtransforms-2.4.jar` before using deconvolution
 * [Parallel Iterative Deconvolution (if using iterative deconvolution)](https://sourceforge.net/projects/iterativedeconv/files/iterativedeconv/1.12/parallel_iterative_deconvolution-1.12-bin.zip/download) 1.12
   - download plugin binary zip file and copy all *.jar files to `Fiji.app/plugins` folder
-  - delete file jars/jtransforms-2.4.jar before using deconvolution
+  - delete file `jars/jtransforms-2.4.jar` before using deconvolution
 * h5py and scikit-image installed on system for h5/tif functions
   - on Ubuntu, can use `sudo pip3 install h5py scikit-image` at console to install
 * pyklb installed on system for klb functions and TGMM
