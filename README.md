@@ -20,6 +20,7 @@ A collection of methods for deconvolving, filtering, and rendering LSFM images. 
 ```
 git clone https://github.com/bhoeckendorf/pyklb
 cd pyklb
+sudo pip3 install cython==0.29.35
 python3 setup.py build
 sudo python3 setup.py install
 ```
