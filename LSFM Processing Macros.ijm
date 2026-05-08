@@ -254,68 +254,102 @@ function Zeiss_WDforObjective(Olightsheet) {
 	return return_array;
 }
 
-function UM2_WDforObjective(Olightsheet) {
-	//returns working distance and coverslip thickness (i.e. depth to sample) of the objective
-	return_array = newArray(3); // WD, coverslip (always 0), NA
-	Array.fill(return_array, 0 );
-	
-	if (startsWith( Olightsheet, "mi plan " ) ) { // LaVision UM2
-		//probably water dipping objective
-		if (matches(Olightsheet, ".*1\.1\(x\|X\).*" ) ) {
-			if (matches(Olightsheet, ".*dc57.*" ) ) {
-				return_array[0] = 17600;
-			} else if (matches(Olightsheet, ".*dc40.*" ) ) {
-				return_array[0] = 16000;
-			}
-			return_array[2] = 0.1;	
-		} else if (matches(Olightsheet, ".*4\(x\|X\).*" ) ) {
-			if (matches(Olightsheet, ".*dc57.*" ) ) {
-				return_array[0] = 16000;
-			} else if (matches(Olightsheet, ".*dc49.*" ) ) {
-				return_array[0] = 16000;
-			} else if (matches(Olightsheet, ".*dc33.*" ) ) {
-				return_array[0] = 16000;
-			}
-			return_array[2] = 0.35;	
-		} else if (matches(Olightsheet, ".*12\(x\|X\).*" ) ) {
-			if (matches(Olightsheet, ".*dc57.*" ) ) {
-				return_array[0] = 10000;
-			} else if (matches(Olightsheet, ".*dc49.*" ) ) {
-				return_array[0] = 10900;
-			} else if (matches(Olightsheet, ".*dc33.*" ) ) {
-				return_array[0] = 8500;
-			}	
-			return_array[2] = 0.53;	
-		}
-	} else {
-		print ("The working distance and coverslip are not defined for " + Olightsheet + " \n");
-	}
-	//print ("LaVision: " + d2s(return_array[0],0) + " " + d2s(return_array[1],0) );
-	return return_array;
-}
-
 function return_parse_xml_line_for_value ( inString ) {
 	//print( "checking for value in " + inString );
 	inString = toLowerCase(inString);
-	
+
 	start_index = indexOf(inString, "value=\"") +7;
 	//print( "   ...at " + d2s(start_index+6,0) );
-	
+
 	if ( start_index < 0 ) {
 		return ""
 	}
 	subline = substring(inString, start_index );
 	//print( "   ... " + subline );
 	stop_index = indexOf(subline, "\"" );
-	
+
 	if ( stop_index < 0 ) {
 		return ""
 	}
-	
+
 	subline = substring(subline, 0, stop_index );
 	//print( "   ... " + subline );
-	
+
 	return subline ;
+}
+
+function UM2_WDforObjective(Olightsheet) {
+	// Returns working distance, coverslip/sample-depth offset, and detection NA.
+	// return_array[0] = working distance in microns
+	// return_array[1] = coverslip/sample-depth correction, usually 0 for dipping/cleared-sample objectives
+	// return_array[2] = objective NA
+
+	return_array = newArray(3);
+	Array.fill(return_array, 0);
+
+	// normalize objective string
+	obj = toLowerCase(Olightsheet);
+
+	// -------------------------
+	// LaVision / Miltenyi UM2
+	// Example: "MI Plan 1.1x DC57"
+	// -------------------------
+	if (startsWith(obj, "mi plan ")) {
+
+		if (matches(obj, ".*1\\.1x.*")) {
+			if (matches(obj, ".*dc57.*")) {
+				return_array[0] = 17600;
+			} else if (matches(obj, ".*dc40.*")) {
+				return_array[0] = 16000;
+			}
+			return_array[2] = 0.10;
+
+		} else if (matches(obj, ".*4x.*")) {
+			if (matches(obj, ".*dc57.*")) {
+				return_array[0] = 16000;
+			} else if (matches(obj, ".*dc49.*")) {
+				return_array[0] = 16000;
+			} else if (matches(obj, ".*dc33.*")) {
+				return_array[0] = 16000;
+			}
+			return_array[2] = 0.35;
+
+		} else if (matches(obj, ".*12x.*")) {
+			if (matches(obj, ".*dc57.*")) {
+				return_array[0] = 10000;
+			} else if (matches(obj, ".*dc49.*")) {
+				return_array[0] = 10900;
+			} else if (matches(obj, ".*dc33.*")) {
+				return_array[0] = 8500;
+			}
+			return_array[2] = 0.53;
+		}
+
+	// -------------------------
+	// UltraMicroscope Blaze
+	// Example: "LVBT 4x"
+	// -------------------------
+	} else if (startsWith(obj, "lvbt ")) {
+
+		if (matches(obj, ".*1x.*")) {
+			// verify WD if/when you have manufacturer table
+			return_array[0] = 17600;
+			return_array[2] = 0.1;
+
+		} else if (matches(obj, ".*4x.*")) {
+			return_array[0] = 16000;
+			return_array[2] = 0.35;
+
+		} else if (matches(obj, ".*12x.*")) {
+			return_array[0] = 10000;
+			return_array[2] = 0.53;
+		}
+
+	} else {
+		print("The working distance and coverslip are not defined for " + Olightsheet + "\n");
+	}
+
+	return return_array;
 }
 
 function return_odd_pixel_dimension( dimension ) {
@@ -342,15 +376,67 @@ function return_odd_pixel_dimension( dimension ) {
 		return 63; //don't go larger than this
 	}
 }
+
+function return_parse_xml_line_for_attribute(line, attribute_name) {
+    search_string = attribute_name + "=\"";
+    start_idx = indexOf(line, search_string);
+
+    if (start_idx < 0)
+        return "";
+
+    start_idx = start_idx + lengthOf(search_string);
+    end_idx = indexOf(substring(line, start_idx), "\"");
+
+    if (end_idx < 0)
+        return "";
+
+    return "" + substring(line, start_idx, start_idx + end_idx);
+}
+
+function return_parse_xml_line_for_attribute_from_text(text, tag_start, attribute_name) {
+    tag_idx = indexOf(text, tag_start);
+    if (tag_idx < 0)
+        return "";
+
+    sub = substring(text, tag_idx);
+    end_tag = indexOf(sub, ">");
+    if (end_tag >= 0)
+        sub = substring(sub, 0, end_tag + 1);
+
+    return "" + return_parse_xml_line_for_attribute(sub, attribute_name);
+}
+
+function return_parse_prop_value_from_text(text, fname) {
+    search = "fname=\"" + fname + "\"";
+    idx = indexOf(text, search);
+    if (idx < 0)
+        return "";
+
+    // Walk backward to the start of the nearest prop tag.
+    start = idx;
+    while (start > 0 && substring(text, start, start + 5) != "<prop") {
+        start--;
+    }
+
+    sub = substring(text, start);
+    end_tag = indexOf(sub, "/>");
+    if (end_tag >= 0)
+        sub = substring(sub, 0, end_tag + 2);
+
+    if (indexOf(sub, "Value=\"") < 0)
+        return "";
+
+    return "" + return_parse_xml_line_for_value(sub);
+}
 	
-function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirectory) {	
-	
+function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirectory) {
+
 	processList = newArray(0);
 	unique_PSF_filenames = newArray(0);
-	unique_PSF_parameters = newArray(0);	
+	unique_PSF_parameters = newArray(0);
 	run("Bio-Formats Macro Extensions");
 	type = "";
-	
+
 	if ( folder_in_batch ) {
 		if ( directory == "" || !File.exists(directory) ) {
 			//Ask user to choose the input and output directories
@@ -363,75 +449,75 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 			if (endsWith(fileList[i], ".czi")) { // Zeiss Z.1 CZI format
 				type = ".czi";
 				break;
-			} else if (endsWith(fileList[i], "Z0000.ome.tif")) { // OME format, possibly UM2
-				type = "Z0000.ome.tif";
+			} else if (endsWith(fileList[i], ".ome.tif")) { // OME format, possibly UM2 / Blaze
+				type = ".ome.tif";
 				break;
 			}
 		}
 		for (i=0; i<fileList.length; i++) {
 			if (endsWith(fileList[i], type )) {
 				//now, remove .czi from end of filename
-				
+
 				filepaddedname = substring(fileList[i], 0, indexOf(fileList[i], type) );
-				
+
 				/*name_ext = split(fileList[i],".");
 				filepaddedname = "";
 				for (n=0; n<name_ext.length-1; n++) {
 					filepaddedname += name_ext[n];
 				}*/
-				
+
 				//print( "    " + name_ext[0] + " " + name_ext[0] + " " + name_ext[0] + " " + name_ext[0] + " " + name_ext[0] + " " +);
-	
+
 				//get ready to rename on save
 				if ( endsWith(filepaddedname,".") ) { //additional trailing periods should be removed
 					while( endsWith(filepaddedname,".") ) {
-						filepaddedname = substring(filepaddedname,0,filepaddedname.length);					
+						filepaddedname = substring(filepaddedname,0,filepaddedname.length);
 					}
 				}
-				
+
 				processList = Array.concat( processList, filepaddedname + "///" + fileList[i] ); //new name will consist of padded old name so we can sort correctly by timepoint
 			}
 		}
 	} else {
 		path = File.openDialog("Select a File");
   		directory = File.getParent(path);
-  		name = File.getName(path);		
+  		name = File.getName(path);
 		//name_ext = split(name,".");
 
 		if (endsWith(name, ".czi")) { // Zeiss Z.1 CZI format
 			type = ".czi";
-		} else if (endsWith(name, "Z0000.ome.tif")) { // OME format, possibly UM2
-			type = "Z0000.ome.tif";
+		} else if (endsWith(name, ".ome.tif")) { // OME format, possibly UM2 / Blaze
+			type = ".ome.tif";
 		}
-		
+
 		//now, remove .czi from end of filename
 		/*filepaddedname = "";
 		for (n=0; n<name_ext.length-1; n++) {
 			filepaddedname += name_ext[n];
 		}*/
-		
+
 		filepaddedname = substring(name, 0, indexOf(name, type) );
-		
+
 		//get ready to rename on save
 		if ( endsWith(filepaddedname,".") ) { //additional trailing periods should be removed
 			while( endsWith(filepaddedname,".") ) {
-				filepaddedname = substring(filepaddedname,0,filepaddedname.length);					
+				filepaddedname = substring(filepaddedname,0,filepaddedname.length);
 			}
 		}
-		processList = Array.concat( processList, filepaddedname + "///" + name ); //new name will consist of padded old name so we can sort correctly by timepoint		
+		processList = Array.concat( processList, filepaddedname + "///" + name ); //new name will consist of padded old name so we can sort correctly by timepoint
 	}
-	
+
 	if ( outputDirectory == "" || !File.exists(outputDirectory) ) {
 		outputDirectory = getDirectory("Choose output directory");
-	}	
-	
+	}
+
 	Array.sort(processList); //sort files by their intended name, not true name
 	//RIlightsheet = 0;
 	//Olightsheet = "";
 	max_channels = 0;
     max_time = 0;
 	this_time = 0;
-	
+
 	//TODO:uncomment
 	setBatchMode(true);
 
@@ -439,7 +525,7 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 		name_ext = split(processList[i],"(///)");
 		file = directory + file_sep + name_ext[1];
 		print( "Preparing " + directory + file_sep + name_ext[1] + " for deconvolution..." );
-		
+
 		Ext.setId(file);
 		Ext.getSeriesCount(nPositions);
 
@@ -454,10 +540,10 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 
 		Array.fill(string_angles,NaN); // default angle is NaN
 		Array.fill(angles,NaN); // default angle is NaN
-		
+
 		sizeI = 1; // number of illuminations
 		sizeC = 1; // true channel number
-		
+
 		if ( type == ".czi" ) {
 			//get refractive index
 			//although this will retrieve metadata only from active series, refractive index is not different for each channel or view but instead is the same for everything
@@ -472,12 +558,12 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 			if ( Olightsheet == "" || Olightsheet == 0 ) {
 				Ext.getMetadataValue("Experiment|AcquisitionBlock|AcquisitionModeSetup|Objective", Olightsheet);
 			}
-			
+
 			WD_CS_return = Zeiss_WDforObjective( Olightsheet );
 			if ( WD_CS_return[2] > RIlightsheet ) {
 				RIlightsheet = WD_CS_return[2];
 			}
-			
+
 			//identify multi-illumination datasets
 			//sizeI = 1;
 			Ext.getMetadataValue("Information|Image|SizeI", sizeI);
@@ -501,12 +587,12 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 			if ( isNaN(sizeV) || sizeV < 1 ) {
 				sizeV = 1;
 			}
-			
+
 			if ( sizeV != nPositions ) {
 				print ( "Mismatch between views/positions in file and metadata, " + d2s(nPositions,0) + " vs. " + d2s(sizeV,0) + ", in " + directory + file_sep + name_ext[1] + "!\n" );
 				continue;
 			}
-			
+
 			//grab initial angles from file
 			if ( nPositions < 1) {
 				print ( "Fewer than one view/position present in file " + directory + file_sep + name_ext[1] + "!\n" );
@@ -590,7 +676,7 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 		if ( nPositions == 1 ) {
 			angles[0] = 0; // first angle is 0
 		}
-		
+
 		//get lightsheet data for each channel
 		num_channels = 0;
 	    num_time = 0;
@@ -598,12 +684,12 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 		max_width = 0;
 		for(a=0; a<nPositions; a++) {
 			dim_width = 0;
-				
+
 			Ext.setSeries(a);
 			Ext.getSizeC(num_channels);
 	        Ext.getSizeT(num_time);
 			Ext.getSizeX(dim_width);
-			
+
 			if ( num_channels > max_channels ) {
 				max_channels = num_channels;
 			}
@@ -614,7 +700,7 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 				max_width = dim_width;
 			}
 		}
-		
+
 		NAlightsheets = newArray(max_channels);
 		NAdetections = newArray(max_channels);
 		WLlightsheets = newArray(max_channels);
@@ -627,7 +713,7 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 		Array.fill(WLdetections,0); // default WL is 0
 
 		if ( type == ".czi" ) {
-			
+
 			sizeC = 1;
 			Ext.getMetadataValue("Information|Image|SizeI", sizeC);
 			if ( isNaN(sizeC) ) {
@@ -638,14 +724,14 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 			if ( isNaN(sizeC) || sizeC < 1 ) {
 				sizeC = 1;
 			}
-				
+
 			if ( sizeI > 1 ) {
 				if ( max_channels != sizeC * sizeI ) {
 					print ( "Mismatch between channels and illuminations in file and metadata, " + d2s(max_channels,0) + " vs. " + d2s(sizeC,0) + ", in " + directory + file_sep + name_ext[1] + "!\n" );
 				}
 			}
-			
-			
+
+
 			for(a=0; a<max_channels; a++) {
 				aa = a;
 				if ( sizeI > 1 && a >= sizeC ) {
@@ -655,26 +741,25 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 				Ext.getMetadataValue("Information|Image|Channel|NADetection #" + d2s((aa+1),0), NAdetections[a]);
 				Ext.getMetadataValue("Information|Image|Channel|IlluminationWavelength|SinglePeak #" + d2s((aa+1),0), WLlightsheets[a]);
 				Ext.getMetadataValue("Information|Image|Channel|DetectionWavelength|SinglePeak #" + d2s((aa+1),0), WLdetections[a]);
-				
+
 				print( "  ..examining " + name_ext[0] + " ...channel " + d2s(a,0) + " parameters: NAill " + d2s(NAlightsheets[a],6) + ", NAdet " + d2s(NAdetections[a],6) + ", WLill " + d2s(WLlightsheets[a],2) + ", WLdet " + d2s(WLdetections[a],2) );
 			}
 		} else {
 			sizeC = max_channels;
 		}
 
-		for (t=0; t<max_time; t++ ) {		
+		for (t=0; t<max_time; t++ ) {
 			for(a=0; a<nPositions; a++) {
 				if ( nPositions == 1 ) {
-					run("Bio-Formats", "open=[" + file + "] color_mode=Default rois_import=[ROI manager] specify_range view=Hyperstack stack_order=XYCZT " + " t_begin=" + d2s(t+1,0) + " t_end=" + d2s(t+1,0) + " t_step=1" );	
+					run("Bio-Formats", "open=[" + file + "] color_mode=Default rois_import=[ROI manager] specify_range view=Hyperstack stack_order=XYCZT " + " t_begin=" + d2s(t+1,0) + " t_end=" + d2s(t+1,0) + " t_step=1" );
 				} else {
 					run("Bio-Formats", "open=[" + file + "] color_mode=Default rois_import=[ROI manager] specify_range view=Hyperstack stack_order=XYCZT series_"+ d2s(a+1,0) + " t_begin_" + d2s(a+1,0) + "=" + d2s(t+1,0) + " t_end_" + d2s(a+1,0) + "=" + d2s(t+1,0) + " t_step_" + d2s(a+1,0) + "=1" );
 				}
-				
-				//Get data from this particular stack if UM2
-				if ( type == "Z0000.ome.tif" ) {
-					open( file );
-					infoData=getMetadata("Info");
-					close();
+
+				//Get data from this particular stack if UM2 / Blaze
+				if ( type == ".ome.tif" ) {
+
+					//close();
 					/*
 			 		* fname="UltraII LRI" nTy="3" nId="524292" Value="1.550000"
 			 		* fname="UltraII ObjectiveName" nTy="5" nId="524292" Value="MI Plan 1.1x DC57"
@@ -687,7 +772,7 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 			 		* <EmissionWL EmissionWL="525"/>
 			 		* <Pixels ID="Pixels:25492249-EF27-4C5C-9DC5-D4343416BCD4" DimensionOrder="XYZTC" PixelType="uint16" BigEndian="false" SizeX="1772" SizeY="1742" SizeZ="1117" SizeT="1" SizeC="1" PhysicalSizeX="3.559694" PhysicalSizeY="3.559693" PhysicalSizeZ="1.700000">
 				 	*/
-					infoString = split(infoData, "\n");
+					/*infoString = split(infoData, "\n");
 					beam_waist = "0";
 					for ( l=0; l<infoString.length; l++ ) {
 						if (indexOf(infoString[l], "fname=\"UltraII LRI\"") >= 0) {
@@ -697,24 +782,212 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 						} else if (indexOf(infoString[l], "fname=\"UltraII CurWLExcitation\"") >= 0) {
 							WLlightsheets[0] = return_parse_xml_line_for_value(infoString[l]);
 						} else if (indexOf(infoString[l], "fname=\"UltraII CurWLEmission\"") >= 0) {
-							WLdetections[0] = return_parse_xml_line_for_value(infoString[l]);							
+							WLdetections[0] = return_parse_xml_line_for_value(infoString[l]);
 						} else if (indexOf(infoString[l], "fname=\"UltraII ExBeamWaist\"") >= 0) {
 							beam_waist = return_parse_xml_line_for_value(infoString[l]);
-						} 
+						}
 					}
-		
+
 					WD_CS_return = UM2_WDforObjective( Olightsheet );
 					NAdetections[0] = d2s(WD_CS_return[2],1);
 
-					//calculate lightsheet NA					
+					//calculate lightsheet NA
 					// beam_waist = RI_immersion * lambda_lightsheet / ( NA_lightsheet * PI );
 					//NA = (1.55) * .488 / ( PI * 3.889772 )
-					//	( PI * 3.889772 ) = 12.22						
-					NAlightsheets[0] = d2s( (parseFloat(RIlightsheet) * parseFloat(WLlightsheets[0])/1000) / ( PI * parseFloat(beam_waist)),10);
-					
+					//	( PI * 3.889772 ) = 12.22
+					NAlightsheets[0] = d2s( (parseFloat(RIlightsheet) * parseFloat(WLlightsheets[0])/1000) / ( PI * parseFloat(beam_waist)),10);*/
+
+					infoData = getMetadata("Info");
+					omeXML = getInfo("image.description");
+
+					infoString = split(infoData + "\n" + omeXML, "\n");
+
+					beam_waist = "0";
+					current_WLlight = "0";
+					current_WLdet = "0";
+					found_channel_specific_wavelengths = false;
+
+					// ------------------------------------------------
+					// 1) Parse direct OME-XML / Blaze fields first.
+					// These are preferred and should not be overwritten.
+					// ------------------------------------------------
+
+					// Objective ID
+					tmp = return_parse_xml_line_for_attribute_from_text(omeXML, "<ObjectiveID ", "ObjectiveID");
+					if (tmp != "")
+					    Olightsheet = tmp;
+
+					// Objective NA
+					tmp = return_parse_xml_line_for_attribute_from_text(omeXML, "<ObjectiveNA ", "ObjectiveNA");
+					if (parseFloat(tmp) > 0) {
+					    for (bb=0; bb<max_channels; bb++)
+					        NAdetections[bb] = tmp;
+					}
+
+					// Channel-specific Blaze / OME filter wavelengths
+					for (bb=0; bb<max_channels; bb++) {
+					    tag = "<Filter" + d2s(bb,0) + " ";
+					    if (indexOf(omeXML, tag) >= 0) {
+					        tmp_ex = return_parse_xml_line_for_attribute_from_text(omeXML, tag, "ExcitationWL");
+					        tmp_em = return_parse_xml_line_for_attribute_from_text(omeXML, tag, "EmissionWL");
+
+					        if (parseFloat(tmp_ex) > 0) {
+					            WLlightsheets[bb] = tmp_ex;
+					            found_channel_specific_wavelengths = true;
+					        }
+
+					        if (parseFloat(tmp_em) > 0) {
+					            WLdetections[bb] = tmp_em;
+					            found_channel_specific_wavelengths = true;
+					        }
+					    }
+					}
+
+					// Blaze RI
+					tmp = return_parse_prop_value_from_text(omeXML, "Blaze LRI");
+					if (parseFloat(tmp) > 0)
+					    RIlightsheet = tmp;
+
+					// Blaze direct illumination NA
+					tmp = return_parse_prop_value_from_text(omeXML, "Blaze NA");
+					if (parseFloat(tmp) > 0) {
+					    for (bb=0; bb<max_channels; bb++)
+					        NAlightsheets[bb] = tmp;
+					}
+
+					// Blaze beam waist
+					tmp = return_parse_prop_value_from_text(omeXML, "Blaze ExBeamWaist");
+					if (parseFloat(tmp) > 0)
+					    beam_waist = tmp;
+
+
+					// ------------------------------------------------
+					// 2) Parse line-based UM2 / legacy metadata.
+					// Only fill values that are still missing.
+					// ------------------------------------------------
+					for (l=0; l<infoString.length; l++) {
+
+					    // RI
+					    if ((indexOf(infoString[l], "fname=\"UltraII LRI\"") >= 0 ||
+					         indexOf(infoString[l], "fname=\"Blaze LRI\"") >= 0) &&
+					         parseFloat(RIlightsheet) <= 0) {
+
+					        RIlightsheet = return_parse_xml_line_for_value(infoString[l]);
+
+					    // Objective name
+					    } else if ((indexOf(infoString[l], "fname=\"UltraII ObjectiveName\"") >= 0 ||
+					                indexOf(infoString[l], "fname=\"ObjectiveID\"") >= 0) &&
+					                (Olightsheet == "" || Olightsheet == 0)) {
+
+					        Olightsheet = return_parse_xml_line_for_value(infoString[l]);
+
+					    // Beam waist
+					    } else if ((indexOf(infoString[l], "fname=\"UltraII ExBeamWaist\"") >= 0 ||
+					                indexOf(infoString[l], "fname=\"Blaze ExBeamWaist\"") >= 0) &&
+					                parseFloat(beam_waist) <= 0) {
+
+					        beam_waist = return_parse_xml_line_for_value(infoString[l]);
+
+					    // Direct detection NA
+					    } else if (indexOf(infoString[l], "fname=\"ObjectiveNA\"") >= 0) {
+
+					        tmp = return_parse_xml_line_for_value(infoString[l]);
+					        if (parseFloat(tmp) > 0) {
+					            for (bb=0; bb<max_channels; bb++) {
+					                if (parseFloat(NAdetections[bb]) <= 0)
+					                    NAdetections[bb] = tmp;
+					            }
+					        }
+
+					    // Direct illumination NA
+					    } else if (indexOf(infoString[l], "fname=\"Blaze NA\"") >= 0) {
+
+					        tmp = return_parse_xml_line_for_value(infoString[l]);
+					        if (parseFloat(tmp) > 0) {
+					            for (bb=0; bb<max_channels; bb++) {
+					                if (parseFloat(NAlightsheets[bb]) <= 0)
+					                    NAlightsheets[bb] = tmp;
+					            }
+					        }
+
+					    // Current/global wavelength fallbacks
+					    } else if (indexOf(infoString[l], "fname=\"UltraII CurWLExcitation\"") >= 0 ||
+					               indexOf(infoString[l], "fname=\"Blaze CurWLExcitation\"") >= 0) {
+
+					        current_WLlight = return_parse_xml_line_for_value(infoString[l]);
+
+					    } else if (indexOf(infoString[l], "fname=\"UltraII CurWLEmission\"") >= 0 ||
+					               indexOf(infoString[l], "fname=\"Blaze CurWLEmission\"") >= 0) {
+
+					        current_WLdet = return_parse_xml_line_for_value(infoString[l]);
+					    }
+
+					    // UM2-style channel-specific wavelengths
+					    for (bb=0; bb<max_channels; bb++) {
+					        if (indexOf(infoString[l], "fname=\"UltraII Wavelength" + d2s(bb,0) + "\"") >= 0 ||
+					            indexOf(infoString[l], "fname=\"Blaze ExWavelength" + d2s(bb,0) + "\"") >= 0) {
+
+					            tmp = return_parse_xml_line_for_value(infoString[l]);
+					            if (parseFloat(tmp) > 0 && parseFloat(WLlightsheets[bb]) <= 0) {
+					                WLlightsheets[bb] = tmp;
+					                found_channel_specific_wavelengths = true;
+					            }
+
+					        } else if (indexOf(infoString[l], "fname=\"UltraII EmWavelength" + d2s(bb,0) + "\"") >= 0 ||
+					                   indexOf(infoString[l], "fname=\"Blaze EmWavelength" + d2s(bb,0) + "\"") >= 0) {
+
+					            tmp = return_parse_xml_line_for_value(infoString[l]);
+					            if (parseFloat(tmp) > 0 && parseFloat(WLdetections[bb]) <= 0) {
+					                WLdetections[bb] = tmp;
+					                found_channel_specific_wavelengths = true;
+					            }
+					        }
+					    }
+					}
+
+
+					// ------------------------------------------------
+					// 3) Fallbacks: fill only missing values.
+					// ------------------------------------------------
+
+					// Wavelength fallback: only if channel-specific value missing
+					for (bb=0; bb<max_channels; bb++) {
+					    if (parseFloat(WLlightsheets[bb]) <= 0 && parseFloat(current_WLlight) > 0)
+					        WLlightsheets[bb] = current_WLlight;
+
+					    if (parseFloat(WLdetections[bb]) <= 0 && parseFloat(current_WLdet) > 0)
+					        WLdetections[bb] = current_WLdet;
+					}
+
+					// Objective geometry / detection NA fallback
+					if (Olightsheet != "" && Olightsheet != 0) {
+					    WD_CS_return = UM2_WDforObjective(Olightsheet);
+
+					    for (bb=0; bb<max_channels; bb++) {
+					        if (parseFloat(NAdetections[bb]) <= 0)
+					            NAdetections[bb] = d2s(WD_CS_return[2],6);
+					    }
+					} else {
+					    print("WARNING: Objective name/ID was not parsed from OME metadata.");
+					}
+
+					// Illumination NA fallback: only if direct Blaze/metadata NA missing
+					for (bb=0; bb<max_channels; bb++) {
+					    if (parseFloat(NAlightsheets[bb]) <= 0 &&
+					        parseFloat(RIlightsheet) > 0 &&
+					        parseFloat(WLlightsheets[bb]) > 0 &&
+					        parseFloat(beam_waist) > 0) {
+
+					        NAlightsheets[bb] = d2s(
+					            (parseFloat(RIlightsheet) * parseFloat(WLlightsheets[bb]) / 1000.0) /
+					            (PI * parseFloat(beam_waist)),
+					            10
+					        );
+					    }
+					}
 				}
-				
-				//Get name of opened stack	
+
+				//Get name of opened stack
 				master_title = getTitle();
 				rand_num = d2s( floor(random() * 1000000 ), 0 );
 				rename( "Image" + rand_num );
@@ -722,7 +995,7 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 				getDimensions(dim_width, dim_height, dim_channels, dim_slices, dim_frames);
 				getVoxelSize(vox_width, vox_height, vox_depth, vox_unit);
 				voxel_definition_output = "unit=" + vox_unit + " pixel_width=" + d2s(vox_width,10) + " pixel_height=" + d2s(vox_height,10) + " voxel_depth=" + d2s(vox_depth,10); //will use later when we output the file
-				
+
 				//make all units nanometers
 				if (vox_unit=="nm" || vox_unit=="nanometers" || vox_unit=="nanometer") {
 					//do nothing
@@ -746,7 +1019,7 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 					print ( "Cannot interpret voxel unit " + vox_unit + " for " + file + ", series " + d2s(a,0) + "\n" );
 					continue;
 				}
-				
+
 				//check height and width scales
 				if ( vox_width > 1.001 * vox_height || vox_height > 1.001 * vox_width ) {
 					print ( "Unexpected XY scale difference: " + d2s(vox_height,5) + " vs. " + d2s(vox_width,5) + " for " + file + ", series " + d2s(a,0) + "\n" );
@@ -754,42 +1027,42 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 				}
 
 				print( "  ..examining " + name_ext[0] + " ...series " + d2s(a,0) + " attributes: Xdim (nm): " + d2s(dim_width*vox_width,2) + ", Ydim (nm): " + d2s(dim_height*vox_height,2) + ", Zdim (nm): " + d2s(dim_slices*vox_depth,2) );
-		
+
 				//Split channels and record names of each new image stack
 				channelList = newArray(0);
 				if ( dim_channels > 1 ) {
 					run("Split Channels");
 					for (b=1; b<=dim_channels; b++ ) {
-						channelList = Array.concat( channelList, "C" + IJ.pad(b,1) + "-" + title ); 
+						channelList = Array.concat( channelList, "C" + IJ.pad(b,1) + "-" + title );
 					}
 				} else if ( dim_channels == 1 ) {
 					channelList = Array.concat( channelList, title );
 				} else {
-					continue; //skip this series altogether	
+					continue; //skip this series altogether
 				}
-				
-				if ( type == "Z0000.ome.tif" ) {
+
+				if ( type == ".ome.tif" ) {
 					for (b=0; b<channelList.length; b++ ) {
-						if ( b > 0 ) {
+						/*if ( b > 0 ) {
 							WLlightsheets[b] = WLlightsheets[0];
 							WLdetections[b] = WLdetections[0];
 							NAdetections[b] = NAdetections[0];
 							NAlightsheets[b] = NAlightsheets[0];
-						}
+						}*/
 						print( "  ..examining " + name_ext[0] + " ...channel " + d2s(b,0) + " parameters: NAill " + d2s(NAlightsheets[b],6) + ", NAdet " + d2s(NAdetections[b],6) + ", WLill " + d2s(WLlightsheets[b],2) + ", WLdet " + d2s(WLdetections[b],2) );
 					}
 				}
-		
+
 				fileoutname = newArray(channelList.length);
-				
+
 				psf_id = newArray(max_channels);
 				psf_depth = newArray(max_channels); // Z-depth for PSF
 				Array.fill(psf_id,NaN); // default is no fill
 				Array.fill(psf_depth,NaN); // default is no fill
-				
+
 				//lambdas = newArray(max_channels);
 				//Array.fill(lambdas,0); //no regularization by default
-				
+
 				//figure out file out names
 				if ( sizeI > 1 ) {
 					for (b=0; b<channelList.length; b++ ) {
@@ -808,13 +1081,26 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 						fileoutname[b] = "LSFM__" + replace(name_ext[0],' ','_') + "__C" + IJ.pad(b,1) + "__A" + IJ.pad(d2s(round(angles[a]),0),3);
 					}
 				}
-				
+
 				//do PSFs separately since they require batchmode to be off
 				for (b=0; b<channelList.length; b++ ) {
+					// DEBUG: comment out after validating UM2/Blaze metadata parsing
+					print("DEBUG PSF PARAMS: file=" + name_ext[1] +
+					      ", series=" + d2s(a,0) +
+					      ", channel=" + d2s(b,0) +
+					      ", NAill=" + NAlightsheets[b] +
+					      ", NAdet=" + NAdetections[b] +
+					      ", RI=" + RIlightsheet +
+					      ", WLill=" + WLlightsheets[b] +
+					      ", WLdet=" + WLdetections[b] +
+					      ", angle=" + angles[a] +
+					      ", beam_waist=" + beam_waist +
+					      ", objective=" + Olightsheet);
+
 					if ( NAlightsheets[b] > 0 && WLlightsheets[b] > 0 && RIlightsheet > 0 && !(isNaN(angles[a]) ) ) {
-						
+
 						this_PSF_identifier = NAdetections[b] + "//" + NAlightsheets[b] + "//" + RIlightsheet + "//" + WLlightsheets[b] + "//" + WLdetections[b] + "//" + d2s(vox_width,8) + "//" + d2s(vox_depth,8) + "//" + d2s(Rayleigh_dist_calc_waist,8) + "//" + Olightsheet;
-						
+
 						//see if we have done this PSF before
 						is_match = -1;
 						for (m=0;m<unique_PSF_parameters.length; m++ ) {
@@ -823,20 +1109,20 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 								break;
 							}
 						}
-						
+
 						if ( is_match >= 0 ) {
 							//copy file and be done; we've done it before
 							//print ( "File " + outputDirectory + fileoutname[b] + "_psf.tif is match with " + unique_PSF_filenames[is_match] + "...\n" + this_PSF_identifier );
 							//File.copy( unique_PSF_filenames[is_match], outputDirectory + fileoutname[b] + "_psf.tif" );
 							open( unique_PSF_filenames[is_match] );
-							
+
 							getDimensions(_, _, _, psf_depth[b], _);
 							psf_id[b] = getImageID();
-							
+
 						} else { //new PSF, need to generate
 							//generate and save lightsheet  PSF
 							//print ( "File " + outputDirectory + fileoutname[b] + "_psf.tif is no match...\n" + this_PSF_identifier );
-							
+
 							//TODO:uncomment below two
 							setBatchMode("exit and display"); //needed for PSF generation
 							setBatchMode(false);
@@ -847,23 +1133,23 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 							}
 							PSF_name = LS_PSF_generator ( parseFloat(NAdetections[b]), parseFloat(NAlightsheets[b]), parseFloat(RIlightsheet), tissue_RI, parseFloat(WLlightsheets[b]), parseFloat(WLdetections[b]), vox_width, vox_depth, Rayleigh_dist_calc_waist, WD_CS_return[0], WD_CS_return[1] ); //estimate lightsheet radius from w(0) as being 1/4th the total width of the acquired image -- this should cut it about midway
 							selectWindow( PSF_name );
-							
-							
+
+
 							run("Enhance Contrast...", "saturated=0 process_all use");
 							run("16-bit");
-							
-							//print( "Delete result " + outputDirectory + fileoutname[b] + "_psf.tif: " + delete_result ); 
+
+							//print( "Delete result " + outputDirectory + fileoutname[b] + "_psf.tif: " + delete_result );
 							getDimensions(_, _, _, psf_depth[b], _);
 							psf_id[b] = getImageID();
-							
+
 							delete_result = File.delete( outputDirectory + file_sep + fileoutname[b] + "_psf.tif" ); //throw away result
 							saveAs("Tiff", outputDirectory + file_sep + fileoutname[b] + "_psf.tif" );
 							//close();
 							//exit();
-							
+
 							//TODO:uncomment
 							setBatchMode(true);
-							
+
 							//now store in arrays for future use
 							unique_PSF_filenames = Array.concat( unique_PSF_filenames, outputDirectory + file_sep + fileoutname[b] + "_psf.tif" );
 							unique_PSF_parameters = Array.concat( unique_PSF_parameters, this_PSF_identifier );
@@ -874,20 +1160,20 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 						//print ( "File " + outputDirectory + fileoutname[b] + "_psf.tif cannot be saved...\n" + this_PSF_identifier );
 						psf_id[b] = NaN;
 						psf_depth[b] = NaN;
-						
+
 					}
-				}				
-				
-				//now process actual images				
+				}
+
+				//now process actual images
 				//remove blank images -- from all channels together to prevent incorrect registrations later
 				selectWindow(channelList[0]); //use channel 0 as primary channel
 				setSlice(dim_slices);
 				getStatistics( area, mean );
 				if ( mean < 10 ) { //we potentially have a
 					//print( "Mean is : " + d2s(mean,4) + " on slice " + d2s(dim_slices,0) );
-					
+
 					final_slice = dim_slices-1;
-					
+
 					for (ss=dim_slices-10; ss>0; ss-=10 ) { //decrement 10 to find the first slice with data
 						setSlice(ss);
 						getStatistics( area, mean );
@@ -906,25 +1192,25 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 							break;
 						}
 					}
-					
+
 					for (b=0; b<channelList.length; b++ ) {
 						selectWindow(channelList[b]);
 						img_id = getImageID();
 						if (isNaN(psf_id[b]) || isNaN(img_id) ) {
 							continue; //don't process this image
-						}						
+						}
 						run("Slice Remover", "first=" + d2s(final_slice+1,0) + " last=" + d2s(dim_slices,0) + " increment=1");
 					}
 				}
-					
+
 				//preprocess images, first by trying to remove noisy in the background
 				for (b=0; b<channelList.length; b++ ) {
 					selectWindow(channelList[b]);
 					img_id = getImageID();
 					if (isNaN(psf_id[b]) || isNaN(img_id) ) {
 						continue; //don't process this image
-					}					
-					
+					}
+
 					if ( deconvolution_subtract_camera_noise ) {
 						//calculate minimum projection and subtract from stack (attempt to remove noise)
 						run("Z Project...", "projection=[Min Intensity]");
@@ -933,7 +1219,7 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 						selectWindow(average_img);
 						close();
 					}
-					
+
 					//save image to free heap space for deconvolution
 					if ( channelList.length > 2 && b > 0 ) {
 						selectWindow(channelList[b]);
@@ -941,8 +1227,8 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 						close();
 					}
 				}
-				
-				
+
+
 				//do deconvolution here
 				for (b=0; b<channelList.length; b++ ) {
 					if ( channelList.length > 2 && b > 0 ) {
@@ -956,20 +1242,20 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 						continue; //don't process this image
 					}
 					//do deconvolution here
-					
+
 					//try to estimate regularization parameter based on image histogram -- this should be revised
 					Stack.getStatistics( area, mean, min, max, std );
-					
+
 					//arbitrarily set regularization parameter, based on 16-bit images input
 					//lambda = 75 / ( std + 100); // 10/std was the original, but produced ringing artifacts -- therefore try 50/std , but in truth we should do two iterations stepping down from lambda 1000/std then 100/std
 					lambda = deconvolution_regression_parameter / ( std + deconvolution_regression_parameter);
-					
+
 					//decide if stack is too large for single run with deconvolution plugin (plugin does not use block-wise)
 					getDimensions(dim_width, dim_height, _, dim_slices, _);
 					if ( dim_slices > max_slice_depth ) {  // if ( dim_slices * dim_width * dim_height > 1769472000 ) {
 						//chunk image into 480-slice components (including PSF depth padding), then deconvolve each one and recompose
 						num_blocks = floor((dim_slices/(max_slice_depth-(3*psf_depth[b])))+1); //internal blocks: one PSF padding and half PSF on each side
-						
+
 						if ( num_blocks < 2 ) { //case num_blocks == 1 -- shouldn't ever get here
 							//32-bit output (with single precision calculation)
 							run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.gtik.FloatReflexiveGeneralizedTikhonov3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.SpectralEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar frgt = new FloatReflexiveGeneralizedTikhonov3D(WindowManager.getImage(" + d2s(img_id, 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), SpectralEnums.FloatStencil3DType.LAPLACIAN.stencil, SpectralEnums.ResizingType.NONE, Enums.OutputType.FLOAT, false, " + d2s(lambda,8) + ", 0).deconvolve().show();\n";
@@ -992,23 +1278,23 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 								print( "Block depth (" + d2s(block_depth,0) + ") is not greater than PSF depth (" + d2s(psf_depth[b],0) + ") for channel "+d2s(b,0) +", cannot deconvolve " +master_title+"!" );
 								return;
 							}
-							
+
 							//fill img_ids array with parent stack
 							rename( channelList[b] + "-block0" ); //these renaming lines aren't necessary, deconvolution is by imageID, not window title
 							img_ids[0] = img_id; //last and parent block maintains image title, will make substacks from this image (concatenate will look like 1,2,3,...,n,0)
-							
+
 							//take off first substack, block_depth slices (including single PSF pad)
-							run("Make Substack...", "slices=1-" + d2s(block_depth+psf_depth[b],0) ); 
+							run("Make Substack...", "slices=1-" + d2s(block_depth+psf_depth[b],0) );
 							rename( channelList[b] + "-block1" );
 							img_ids[1] = getImageID();
-							
+
 							//go back to parent and delete non-padding portion of first block
 							//selectWindow(channelList[b] + "-block0");
 							selectImage(img_ids[0]);
 							run("Slice Remover", "first=1 last=" + d2s(block_depth-psf_depth[b],0) + " increment=1");
 
 							//deconvolve first child
-							run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.gtik.FloatReflexiveGeneralizedTikhonov3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.SpectralEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar frgt = new FloatReflexiveGeneralizedTikhonov3D(WindowManager.getImage(" + d2s(img_ids[1], 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), SpectralEnums.FloatStencil3DType.LAPLACIAN.stencil, SpectralEnums.ResizingType.NONE, Enums.OutputType.FLOAT, false, " + d2s(lambda,8) + ", 0).deconvolve().show();\n"; //print (run_script);								
+							run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.gtik.FloatReflexiveGeneralizedTikhonov3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.SpectralEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar frgt = new FloatReflexiveGeneralizedTikhonov3D(WindowManager.getImage(" + d2s(img_ids[1], 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), SpectralEnums.FloatStencil3DType.LAPLACIAN.stencil, SpectralEnums.ResizingType.NONE, Enums.OutputType.FLOAT, false, " + d2s(lambda,8) + ", 0).deconvolve().show();\n"; //print (run_script);
 							if ( deconvolution_iterations > 1 ) {
 								run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLFloatIterativeDeconvolver3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLOptions);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.IterativeEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar options = new WPLOptions(); options.setNormalize(true);\nvar frgt = new WPLFloatIterativeDeconvolver3D(WindowManager.getImage(" + d2s(img_ids[1], 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), IterativeEnums.BoundaryType.REFLEXIVE, IterativeEnums.ResizingType.AUTO, Enums.OutputType.FLOAT, " + d2s(deconvolution_iterations,0) +", false, options ).deconvolve().show();\n";
 							}
@@ -1021,24 +1307,24 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 							rand_num = d2s(floor(random() * 1000000 ),0);
 							rename("block1-" + rand_num);
 							cat_text = "  image1=block1-"+rand_num+" ";
-							
+
 							selectImage(img_ids[1]); //close undeconvolved image
 							close();
-								
+
 							for(ii=2; ii<num_blocks; ii++) { //first and last block already taken care of
 								//take off intermediate substack, block_depth slices (including two PSF pad)
 								selectImage(img_ids[0]);
 								run("Make Substack...", "slices=1-" + d2s(block_depth+(2*psf_depth[b]),0) ); //take off an internal substack, block_depth slices (plus double PSF pad)
 								rename( channelList[b] + "-block" + d2s(ii,0) );
 								img_ids[ii] = getImageID();
-								
+
 								//go back to parent and delete non-padding portion of intermediate block
 								//selectWindow(channelList[b] + "-block0");
 								selectImage(img_ids[0]);
 								run("Slice Remover", "first=1 last=" + d2s(block_depth,0) + " increment=1");
-									
+
 								//deconvolve intermediate child
-								run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.gtik.FloatReflexiveGeneralizedTikhonov3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.SpectralEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar frgt = new FloatReflexiveGeneralizedTikhonov3D(WindowManager.getImage(" + d2s(img_ids[ii], 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), SpectralEnums.FloatStencil3DType.LAPLACIAN.stencil, SpectralEnums.ResizingType.NONE, Enums.OutputType.FLOAT, false, " + d2s(lambda,8) + ", 0).deconvolve().show();\n"; //print (run_script);								
+								run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.gtik.FloatReflexiveGeneralizedTikhonov3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.SpectralEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar frgt = new FloatReflexiveGeneralizedTikhonov3D(WindowManager.getImage(" + d2s(img_ids[ii], 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), SpectralEnums.FloatStencil3DType.LAPLACIAN.stencil, SpectralEnums.ResizingType.NONE, Enums.OutputType.FLOAT, false, " + d2s(lambda,8) + ", 0).deconvolve().show();\n"; //print (run_script);
 								if ( deconvolution_iterations > 1 ) {
 									run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLFloatIterativeDeconvolver3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLOptions);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.IterativeEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar options = new WPLOptions(); options.setNormalize(true);\nvar frgt = new WPLFloatIterativeDeconvolver3D(WindowManager.getImage(" + d2s(img_ids[ii], 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), IterativeEnums.BoundaryType.REFLEXIVE, IterativeEnums.ResizingType.AUTO, Enums.OutputType.FLOAT, " + d2s(deconvolution_iterations,0) +", false, options ).deconvolve().show();\n";
 								}
@@ -1052,20 +1338,20 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 								rand_num = d2s(floor(random() * 1000000 ),0);
 								rename("block"+d2s(ii,0)+"-" + rand_num);
 								//cat_text = "  image1=block"+d2s(ii,0)+"-"+rand_num+" ";
-								
+
 								//concatenate intermediate children
 								run("Concatenate...", cat_text + " image2=block"+d2s(ii,0)+"-"+rand_num+" image3=[-- None --]" );
 								rename("block"+d2s(ii,0)+"-" + rand_num); //rename the concatenated stack
 								cat_text = "  image1=block"+d2s(ii,0)+"-"+rand_num+" "; //refresh cat_text with concatenated stack
-								
+
 								//clean up
 								selectImage(img_ids[ii]);
 								close();
 								call("java.lang.System.gc");
 							}
-								
+
 							//deconvolve parent -- note this script DOES NOT deconvolve in place
-							run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.gtik.FloatReflexiveGeneralizedTikhonov3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.SpectralEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar frgt = new FloatReflexiveGeneralizedTikhonov3D(WindowManager.getImage(" + d2s(img_ids[0], 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), SpectralEnums.FloatStencil3DType.LAPLACIAN.stencil, SpectralEnums.ResizingType.NONE, Enums.OutputType.FLOAT, false, " + d2s(lambda,8) + ", 0).deconvolve().show();\n"; //print (run_script);								
+							run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.gtik.FloatReflexiveGeneralizedTikhonov3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.SpectralEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar frgt = new FloatReflexiveGeneralizedTikhonov3D(WindowManager.getImage(" + d2s(img_ids[0], 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), SpectralEnums.FloatStencil3DType.LAPLACIAN.stencil, SpectralEnums.ResizingType.NONE, Enums.OutputType.FLOAT, false, " + d2s(lambda,8) + ", 0).deconvolve().show();\n"; //print (run_script);
 							if ( deconvolution_iterations > 1 ) {
 								run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLFloatIterativeDeconvolver3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.wpl.WPLOptions);\nimportClass(Packages.edu.emory.mathcs.restoretools.iterative.IterativeEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar options = new WPLOptions(); options.setNormalize(true);\nvar frgt = new WPLFloatIterativeDeconvolver3D(WindowManager.getImage(" + d2s(img_ids[0], 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), IterativeEnums.BoundaryType.REFLEXIVE, IterativeEnums.ResizingType.AUTO, Enums.OutputType.FLOAT, " + d2s(deconvolution_iterations,0) +", false, options ).deconvolve().show();\n";
 							}
@@ -1085,7 +1371,7 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 							run("Concatenate...", "  " + cat_text);
 
 							img_id = img_ids[0];
-							
+
 							//clean up residual mess
 							/*
 							for(ii=1; ii<num_blocks; ii++) {
@@ -1115,19 +1401,19 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 					setMinAndMax(0, 65535); //clip the upper bounds of signal (lower bounds already clipped for nonnegativity)
 					run("16-bit");
 					run("Properties...", voxel_definition_output );
-					
+
 					//16-bit output (with double, not single precision calculation)
 					//run_script = "importClass(WindowManager);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.gtik.DoubleReflexiveGeneralizedTikhonov3D);\nimportClass(Packages.edu.emory.mathcs.restoretools.spectral.SpectralEnums);\nimportClass(Packages.edu.emory.mathcs.restoretools.Enums);\nvar frgt = new DoubleReflexiveGeneralizedTikhonov3D(WindowManager.getImage(" + d2s(img_id, 0) + "), WindowManager.getImage(" + d2s(psf_id[b], 0) + "), SpectralEnums.DoubleStencil3DType.LAPLACIAN.stencil, SpectralEnums.ResizingType.NONE, Enums.OutputType.SHORT, false, 0.01, 0).deconvolve().show();\n";
 					//print (run_script);
 					//eval( "js", run_script );  //throw away result
-					
+
 					//okay write TIF file
 					delete_result = File.delete( outputDirectory + file_sep + fileoutname[b] + ".tif" ); //throw away result
-					
+
 					saveAs("Tiff", outputDirectory + file_sep + fileoutname[b] + ".tif" );
 					close();
 					print("  ..saved "+fileoutname[b]+".tif");
-					
+
 					//close original image
 					//if ( isOpen(img_id) ) {
 						selectImage(img_id);
@@ -1140,8 +1426,8 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 					//delete image block on disk
 					if ( channelList.length > 2 && b > 0 ) {
 						delete_result = File.delete( outputDirectory + file_sep + channelList[b] + ".tif" );
-					} 
-					
+					}
+
 					//write to logfile
 					File.append( file + ": angle " + string_angles[a] + ", time " + d2s(t+1,0) + " of " + d2s(max_time,0) + ", channel " + d2s(b,0) + " >> " + outputDirectory + file_sep + fileoutname[b] + ".tif", outputDirectory + file_sep + "CZI_to_TIF_with_deconvolution.txt" );
 					//close("*");
@@ -1149,13 +1435,13 @@ function main_ijm_deconvolve_large_stack(folder_in_batch,directory,outputDirecto
 				}
 			}
 			//Close original concatenated stack
-			//close("C*");   
+			//close("C*");
 			this_time++; //increment time counter
 		}
 		//close();
 		Ext.close();
 		call("java.lang.System.gc");
-		print( "  ..finished saving deconvolved images to " + outputDirectory ); 
+		print( "  ..finished saving deconvolved images to " + outputDirectory );
 	}
 }
 
@@ -4426,15 +4712,15 @@ macro "0. Change LSFM processing settings..." {
 	fixed_precipitate_removal = Dialog.getCheckbox();	
 	fixed_blob_removal = Dialog.getCheckbox();	
 }
-macro "1. Deconvolve Z.1 or UM2 acquisitions with large stacks (folder in batch)." {
+macro "1. Deconvolve Z.1 or UM2/Blaze acquisitions with large stacks (folder in batch)." {
 	main_ijm_deconvolve_large_stack(true,"","");
 	setBatchMode("exit and display");
-	print("DONE: Deconvolve Z.1 or UM2 acquisitions with large stacks (folder in batch).");
+	print("DONE: Deconvolve Z.1 or UM2/Blaze acquisitions with large stacks (folder in batch).");
 }
-macro "1. Deconvolve single Z.1 or UM2 acquisitions with large stacks (single file)..." {
+macro "1. Deconvolve single Z.1 or UM2/Blaze acquisitions with large stacks (single file)..." {
 	main_ijm_deconvolve_large_stack(false,"","");
 	setBatchMode("exit and display");
-	print("DONE: Deconvolve single Z.1 or UM2 acquisitions with large stacks (single file).");
+	print("DONE: Deconvolve single Z.1 or UM2/Blaze acquisitions with large stacks (single file).");
 }
 macro "1. Deconvolve Z.1 or MuVi time series files (folder in batch)..." {
 	main_ijm_deconvolve_series("","",false);
@@ -4505,6 +4791,128 @@ macro "4. Convert fused .h5 to .klb (folder in batch)..." {
 	exec("python3", path_dataset_folder_export_all_h5_to_klb, directory, outbits);
 	print("DONE: Convert fused .h5 to .klb (folder in batch).");
 }
+macro "4. Convert fused .h5 to .zarr (folder in batch)..." {
+	directory = getDirectory("Choose h5/xml input directory");
+
+	if (!File.exists(path_dataset_folder_export_all_h5_to_zarr)) {
+		path_dataset_folder_export_all_h5_to_zarr = File.openDialog("Please locate python script: dataset_folder_export_all_h5_to_zarr.py");
+	}
+
+	Dialog.create("Choose Zarr export settings...");
+	Dialog.addChoice("Bits per pixel:", newArray("8", "16"), "16");
+	Dialog.addString("Chunk size Z,Y,X:", "64,256,256", 20);
+	Dialog.show();
+
+	outbits = Dialog.getChoice();
+	chunks = Dialog.getString();
+
+	print("calling: python3 " + path_dataset_folder_export_all_h5_to_zarr + " " + directory + " " + outbits + " " + chunks);
+	exec("python3", path_dataset_folder_export_all_h5_to_zarr, directory, outbits, chunks);
+
+	print("DONE: Convert fused .h5 to .zarr (folder in batch).");
+}
+macro "5. Convert fused .klb to .zarr (folder in batch)..." {
+	setBatchMode("exit and display");
+	file_sep = File.separator();
+	directory = "";
+
+	if (directory == "" || !File.exists(directory)) {
+		directory = getDirectory("Choose KLB input directory");
+	}
+	if (directory == "" || !File.exists(directory)) {
+		print("Cannot find input directory.");
+		return;
+	}
+
+	fileList = getFileList(directory);
+	Array.sort(fileList);
+
+	Dialog.create("KLB to Zarr export settings");
+	Dialog.addString("Output container root:", directory, 80);
+	Dialog.addString("Output suffix to dataset name:", "", 8);
+	Dialog.addString("Chunk size Z,Y,X:", "64,64,32", 20);
+	Dialog.addCheckbox("Create multiscale pyramid", true);
+	Dialog.addChoice("Downsample method:", newArray("Sample", "Average"), "Sample");
+	Dialog.addChoice("Compression:", newArray("zstd", "gzip", "lz4", "raw"), "zstd");
+	Dialog.addChoice("Metadata style:", newArray("OME-NGFF", "N5", "BigDataViewer"), "OME-NGFF");
+	Dialog.addNumber("Threads:", 8);
+	Dialog.addCheckbox("Overwrite existing output", false);
+	Dialog.show();
+
+	containerroot = Dialog.getString();
+	dataset_suffix = Dialog.getString();
+	chunks = Dialog.getString();
+	createpyramid = Dialog.getCheckbox();
+	downsamplemethod = Dialog.getChoice();
+	compressionarg = Dialog.getChoice();
+	metadatastyle = Dialog.getChoice();
+	nthreads = Dialog.getNumber();
+	overwrite = Dialog.getCheckbox();
+
+	createpyramid_text = "false";
+	if ( createpyramid ) {
+		createpyramid_text = "true";
+	}
+
+	overwrite_text = "false";
+	if ( overwrite ) {
+		overwrite_text = "true";
+	}
+
+	if (!endsWith(containerroot, file_sep))
+		containerroot = containerroot + file_sep;
+
+	for (i = 0; i < fileList.length; i++) {
+		filename = fileList[i];
+
+		if (!(startsWith(filename, "t0") && endsWith(filename, ".klb")))
+			continue;
+
+		fullpath = directory + filename;
+		base = substring(filename, 0, filename.length - 4); // strip .klb
+		dataset_name = base + dataset_suffix;
+
+		print("Opening: " + fullpath);
+
+		// KLB reader usually behaves better with batch mode off during open
+		setBatchMode(false);
+		run("KLB...", "open=[" + fullpath + "]");
+		virtID = getImageID();
+
+		setBatchMode(true);
+		selectImage(virtID);
+		run("Duplicate...", "duplicate");
+		stackTitle = getTitle();
+
+		selectImage(virtID);
+		close();
+
+		selectImage(stackTitle);
+		rename( virtID );
+
+		// export
+		run("HDF5/N5/Zarr/OME-NGFF ...",
+			"containerroot=[" + containerroot + "] " +
+			"dataset=" + dataset_name + " " +
+			"storageformat=Zarr " +
+			"chunksizearg=" + chunks + " " +
+			"createpyramidifpossible=" + createpyramid_text + " " +
+			"downsamplemethod=" + downsamplemethod + " " +
+			"compressionarg=" + compressionarg + " " +
+			"metadatastyle=" + metadatastyle + " " +
+			"nthreads=" + d2s(nthreads, 0) + " " +
+			"overwrite=" + overwrite_text
+		);
+
+		close();
+		call("java.lang.System.gc");
+	}
+
+	setBatchMode(false);
+	print("DONE: Convert fused .klb to .zarr (folder in batch).");
+}
+
+
 macro "5. Extract defined slice(s) from LSFM .tif or t0XXXX .klb/.tif files in time series..." {
 	main_extract_defined_slices ("");
 	setBatchMode("exit and display");
